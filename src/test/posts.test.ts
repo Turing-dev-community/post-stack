@@ -739,6 +739,202 @@ describe('Blog Post Routes', () => {
     });
   });
 
+  describe('GET /api/posts/trending', () => {
+    it('should return only published posts from the last 30 days', async () => {
+      // Create posts within last 30 days
+      const recentPost = await prisma.post.create({
+        data: {
+          title: 'Recent Post',
+          content: '# Recent Content',
+          slug: 'recent-post',
+          published: true,
+          authorId: userId,
+          viewCount: 100,
+          createdAt: new Date(), // Today
+        },
+      });
+
+      // Create unpublished post (should not be included)
+      await prisma.post.create({
+        data: {
+          title: 'Unpublished Post',
+          content: '# Unpublished Content',
+          slug: 'unpublished-post',
+          published: false,
+          authorId: userId,
+          viewCount: 200,
+          createdAt: new Date(),
+        },
+      });
+
+      const response = await fetch(`${baseUrl}/posts/trending`);
+
+      const data: any = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data).toHaveProperty('posts');
+      expect(data).toHaveProperty('pagination');
+      expect(data.posts.length).toBeGreaterThanOrEqual(1);
+      expect(data.posts.every((p: any) => p.published === true)).toBe(true);
+      expect(data.posts.some((p: any) => p.slug === 'recent-post')).toBe(true);
+      expect(data.posts.every((p: any) => p.slug !== 'unpublished-post')).toBe(true);
+    });
+
+    it('should exclude posts older than 30 days', async () => {
+      // Create a post from 31 days ago
+      const oldDate = new Date();
+      oldDate.setDate(oldDate.getDate() - 31);
+
+      const oldPost = await prisma.post.create({
+        data: {
+          title: 'Old Post',
+          content: '# Old Content',
+          slug: 'old-post',
+          published: true,
+          authorId: userId,
+          viewCount: 500, // High views but old
+          createdAt: oldDate,
+        },
+      });
+
+      // Create a post from 29 days ago (should be included)
+      const recentDate = new Date();
+      recentDate.setDate(recentDate.getDate() - 29);
+
+      const recentPost = await prisma.post.create({
+        data: {
+          title: 'Recent Post',
+          content: '# Recent Content',
+          slug: 'recent-post',
+          published: true,
+          authorId: userId,
+          viewCount: 50,
+          createdAt: recentDate,
+        },
+      });
+
+      const response = await fetch(`${baseUrl}/posts/trending`);
+
+      const data: any = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.posts.length).toBeGreaterThanOrEqual(1);
+      
+      const postSlugs = data.posts.map((p: any) => p.slug);
+      expect(postSlugs).toContain('recent-post');
+      expect(postSlugs).not.toContain('old-post');
+    });
+
+    it('should order posts by viewCount descending (higher views first)', async () => {
+      // Calculate dates within last 30 days
+      const now = new Date();
+      const date10DaysAgo = new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000);
+      const date15DaysAgo = new Date(now.getTime() - 15 * 24 * 60 * 60 * 1000);
+      const date5DaysAgo = new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000);
+
+      // Create posts with different view counts within last 30 days
+      const lowViewsPost = await prisma.post.create({
+        data: {
+          title: 'Low Views Post',
+          content: '# Low Views Content',
+          slug: 'low-views-post',
+          published: true,
+          authorId: userId,
+          viewCount: 10,
+          createdAt: date10DaysAgo,
+        },
+      });
+
+      const highViewsPost = await prisma.post.create({
+        data: {
+          title: 'High Views Post',
+          content: '# High Views Content',
+          slug: 'high-views-post',
+          published: true,
+          authorId: userId,
+          viewCount: 500,
+          createdAt: date15DaysAgo,
+        },
+      });
+
+      // Create mediumViewsPost using POST API
+      const mediumViewsPostData = {
+        title: 'Medium Views Post',
+        content: '# Medium Views Content',
+        published: true,
+      };
+
+      const mediumViewsPostResponse = await fetch(`${baseUrl}/posts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`,
+        },
+        body: JSON.stringify(mediumViewsPostData),
+      });
+
+      const mediumViewsPostResult: any = await mediumViewsPostResponse.json();
+      expect(mediumViewsPostResponse.status).toBe(201);
+      const mediumViewsPost = mediumViewsPostResult.post;
+
+      // Update viewCount and createdAt using Prisma for test requirements
+      await prisma.post.update({
+        where: { id: mediumViewsPost.id },
+        data: {
+          viewCount: 100,
+          createdAt: date5DaysAgo,
+        },
+      });
+
+      // Verify all three posts exist, are published, and have correct dates
+      const allPosts = await prisma.post.findMany({
+        where: {
+          slug: { in: ['high-views-post', 'medium-views-post', 'low-views-post'] },
+        },
+      });
+      expect(allPosts.length).toBe(3);
+      expect(allPosts.every(p => p.published === true)).toBe(true);
+      
+      // Verify dates are within last 30 days
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      expect(allPosts.every(p => p.createdAt >= thirtyDaysAgo)).toBe(true);
+
+      // Fetch trending posts with a higher limit to ensure we get all our test posts
+      const response = await fetch(`${baseUrl}/posts/trending?limit=50`);
+
+      const data: any = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data).toHaveProperty('posts');
+      expect(Array.isArray(data.posts)).toBe(true);
+
+      // Find the posts we created
+      const highViews = data.posts.find((p: any) => p.slug === 'high-views-post');
+      const mediumViews = data.posts.find((p: any) => p.slug === 'medium-views-post');
+      const lowViews = data.posts.find((p: any) => p.slug === 'low-views-post');
+
+      // All three posts should be in the trending results
+      expect(highViews).toBeDefined();
+      expect(mediumViews).toBeDefined();
+      expect(lowViews).toBeDefined();
+
+      // Check that posts are ordered by viewCount descending
+      const highViewsIndex = data.posts.findIndex((p: any) => p.slug === 'high-views-post');
+      const mediumViewsIndex = data.posts.findIndex((p: any) => p.slug === 'medium-views-post');
+      const lowViewsIndex = data.posts.findIndex((p: any) => p.slug === 'low-views-post');
+
+      // High views should come before medium views
+      expect(highViewsIndex).toBeLessThan(mediumViewsIndex);
+      // Medium views should come before low views
+      expect(mediumViewsIndex).toBeLessThan(lowViewsIndex);
+      // Verify viewCount values
+      expect(highViews.viewCount).toBe(500);
+      expect(mediumViews.viewCount).toBe(100);
+      expect(lowViews.viewCount).toBe(10);
+    });
+  });
+
   describe('GET /api/posts/:slug', () => {
     it('should return published post by slug', async () => {
       const post = await prisma.post.create({

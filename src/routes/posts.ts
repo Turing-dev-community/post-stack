@@ -128,6 +128,71 @@ router.get('/', cacheMiddleware(CACHE_CONFIG.TTL_POSTS_LIST), asyncHandler(async
   });
 }));
 
+// Get trending posts (published in last 30 days)
+router.get('/trending', cacheMiddleware(CACHE_CONFIG.TTL_POSTS_LIST), asyncHandler(async (req: AuthRequest, res: Response) => {
+  const page = parseInt(req.query.page as string) || 1;
+  const limit = parseInt(req.query.limit as string) || 10;
+  const skip = (page - 1) * limit;
+
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+  const whereClause: any = {
+    published: true,
+    createdAt: {
+      gte: thirtyDaysAgo,
+    },
+  };
+
+  const posts = await prisma.post.findMany({
+    where: whereClause,
+    include: {
+      author: {
+        select: {
+          id: true,
+          username: true,
+        },
+      },
+      category: {
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+        },
+      },
+      tags: {
+        include: {
+          tag: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      },
+    },
+    orderBy: [
+      { viewCount: 'desc' },
+    ],
+    skip,
+    take: limit,
+  });
+
+  const total = await prisma.post.count({
+    where: whereClause,
+  });
+
+  return res.json({
+    posts,
+    pagination: {
+      page,
+      limit,
+      total,
+      pages: Math.ceil(total / limit),
+    },
+  });
+}));
+
 // Get all posts for authenticated user (including unpublished)
 router.get('/my-posts', authenticateToken, cacheMiddleware(CACHE_CONFIG.TTL_POSTS_LIST), asyncHandler(async (req: AuthRequest, res: Response) => {
   if (!req.user) {
