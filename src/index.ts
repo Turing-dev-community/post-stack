@@ -6,6 +6,7 @@ import postRoutes from './routes/posts';
 import categoryRoutes from './routes/categories';
 import userRoutes from './routes/users';
 import tagRoutes from './routes/tags';
+import imageRoutes from './routes/images';
 import { authenticateToken } from './utils/auth';
 import { errorHandler } from './middleware/validation';
 import globalRateLimit from './middleware/rateLimit';
@@ -39,6 +40,7 @@ app.use('/api/posts', postRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/tags', tagRoutes);
+app.use('/api/images', imageRoutes);
 
 app.use('/api/protected', authenticateToken);
 
