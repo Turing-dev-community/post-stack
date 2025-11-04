@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { generateToken, hashPassword, comparePassword, authenticateToken } from '../utils/auth';
-import { validateSignup, validateLogin } from '../middleware/validators';
+import { validateSignup, validateLogin, validateProfileUpdate } from '../middleware/validators';
 import { handleValidationErrors, asyncHandler } from '../middleware/validation';
 import { AuthRequest } from '../utils/auth';
 
@@ -100,6 +100,8 @@ router.get('/profile', authenticateToken, asyncHandler(async (req: AuthRequest, 
       id: true,
       email: true,
       username: true,
+      profilePicture: true,
+      about: true,
       createdAt: true,
       _count: {
         select: {
@@ -118,6 +120,61 @@ router.get('/profile', authenticateToken, asyncHandler(async (req: AuthRequest, 
   });
 
   return res.json({
+    user: {
+      ...user,
+      followerCount,
+      followingCount,
+    },
+  });
+}));
+
+router.put('/profile', authenticateToken, validateProfileUpdate, handleValidationErrors, asyncHandler(async (req: AuthRequest, res: Response) => {
+  if (!req.user) {
+    return res.status(401).json({
+      error: 'Authentication required',
+    });
+  }
+
+  const { profilePicture, about } = req.body;
+
+  const updateData: { profilePicture?: string | null; about?: string | null } = {};
+
+  if (profilePicture !== undefined) {
+    updateData.profilePicture = profilePicture || null;
+  }
+
+  if (about !== undefined) {
+    updateData.about = about || null;
+  }
+
+  const user = await prisma.user.update({
+    where: { id: req.user.id },
+    data: updateData,
+    select: {
+      id: true,
+      email: true,
+      username: true,
+      profilePicture: true,
+      about: true,
+      createdAt: true,
+      _count: {
+        select: {
+          posts: true,
+        },
+      },
+    },
+  });
+
+  const followerCount = await prisma.follow.count({
+    where: { followingId: req.user.id },
+  });
+
+  const followingCount = await prisma.follow.count({
+    where: { followerId: req.user.id },
+  });
+
+  return res.json({
+    message: 'Profile updated successfully',
     user: {
       ...user,
       followerCount,
