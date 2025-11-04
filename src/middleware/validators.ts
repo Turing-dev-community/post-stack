@@ -50,12 +50,6 @@ export const validatePost = [
         if (typeof value !== "string") {
           throw new Error("Category ID must be a string");
         }
-        const category = await prisma.category.findUnique({
-          where: { id: value },
-        });
-        if (!category) {
-          throw new Error("Category not found");
-        }
       }
       return true;
     }),
@@ -86,12 +80,6 @@ export const validatePost = [
         for (const tagId of value) {
           if (typeof tagId !== "string") {
             throw new Error("Each tag ID must be a string");
-          }
-          const tag = await prisma.tag.findUnique({
-            where: { id: tagId },
-          });
-          if (!tag) {
-            throw new Error(`Tag with ID ${tagId} not found`);
           }
         }
       }

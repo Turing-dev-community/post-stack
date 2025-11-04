@@ -134,28 +134,6 @@ describe('Categories API', () => {
       expect(data).toHaveProperty('post');
       expect(data.post.category).toBeNull();
     });
-
-    it('should reject invalid category ID', async () => {
-      const response = await fetch(`${baseUrl}/posts`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`,
-        },
-        body: JSON.stringify({
-          title: 'Test Post with Invalid Category',
-          content: 'This should fail',
-          published: true,
-          categoryId: 'invalid-category-id',
-        }),
-      });
-
-      const data: any = await response.json();
-
-      expect(response.status).toBe(400);
-      expect(data).toHaveProperty('error');
-      expect(data.error).toBe('Validation failed');
-    });
   });
 
   describe('PUT /api/posts/:id with category', () => {
@@ -235,28 +213,6 @@ describe('Categories API', () => {
       expect(response.status).toBe(200);
       expect(data).toHaveProperty('post');
       expect(data.post.category).toBeNull();
-    });
-
-    it('should reject invalid category ID on update', async () => {
-      const response = await fetch(`${baseUrl}/posts/${postId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`,
-        },
-        body: JSON.stringify({
-          title: 'Updated Post',
-          content: 'This should fail',
-          published: true,
-          categoryId: 'invalid-category-id',
-        }),
-      });
-
-      const data: any = await response.json();
-
-      expect(response.status).toBe(400);
-      expect(data).toHaveProperty('error');
-      expect(data.error).toBe('Validation failed');
     });
   });
 

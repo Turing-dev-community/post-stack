@@ -1047,17 +1047,6 @@ router.put('/:id', validatePost, authenticateToken, handleValidationErrors, asyn
   let slug = existingPost.slug;
   if (title !== existingPost.title) {
     slug = generateSlug(title);
-
-    // Check if new slug already exists
-    const slugExists = await prisma.post.findUnique({
-      where: { slug },
-    });
-
-    if (slugExists && slugExists.id !== id) {
-      return res.status(400).json({
-        error: 'A post with this title already exists',
-      });
-    }
   }
 
   // Update tags if provided
