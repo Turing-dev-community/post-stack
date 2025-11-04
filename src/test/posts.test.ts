@@ -69,7 +69,7 @@ describe('Blog Post Routes', () => {
       // Create a post with a unique title to ensure it's found
       const uniqueTitle = `Tagged Post ${Date.now()}`;
       const uniqueSlug = `tagged-post-${Date.now()}`;
-      
+
       const post = await prisma.post.create({
         data: {
           title: uniqueTitle,
@@ -91,7 +91,7 @@ describe('Blog Post Routes', () => {
       expect(response.status).toBe(200);
       expect(data).toHaveProperty('posts');
       expect(Array.isArray(data.posts)).toBe(true);
-      
+
       // Find the post we just created
       const taggedPost = data.posts.find((p: any) => p.id === post.id || p.slug === uniqueSlug);
       expect(taggedPost).toBeDefined();
@@ -819,7 +819,7 @@ describe('Blog Post Routes', () => {
 
       expect(response.status).toBe(200);
       expect(data.posts.length).toBeGreaterThanOrEqual(1);
-      
+
       const postSlugs = data.posts.map((p: any) => p.slug);
       expect(postSlugs).toContain('recent-post');
       expect(postSlugs).not.toContain('old-post');
@@ -894,7 +894,7 @@ describe('Blog Post Routes', () => {
       });
       expect(allPosts.length).toBe(3);
       expect(allPosts.every(p => p.published === true)).toBe(true);
-      
+
       // Verify dates are within last 30 days
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -1889,6 +1889,190 @@ describe('Blog Post Routes', () => {
 
       expect(response.status).toBe(400);
       expect(data).toHaveProperty('error', 'Validation failed');
+    });
+
+    describe('Tag update transaction safety', () => {
+      it('should preserve tags when post update fails due to non existent category', async () => {
+        // Create a category
+        const category = await prisma.category.findFirstOrThrow({});
+
+        // Get existing tags
+        const tags = await prisma.tag.findMany({ take: 2 });
+        const tagIds = tags.map(tag => tag.id);
+
+        // Create a post with tags and category
+        const post = await prisma.post.create({
+          data: {
+            title: 'Post with Tags',
+            content: '# Original Content',
+            slug: 'post-with-tags',
+            published: false,
+            authorId: userId,
+            categoryId: category.id,
+            tags: {
+              create: tagIds.map(tagId => ({ tagId })),
+            },
+          },
+        });
+
+        // Verify initial tags exist
+        const initialPost = await prisma.post.findUnique({
+          where: { id: post.id },
+          include: { tags: true },
+        });
+        expect(initialPost?.tags.length).toBe(2);
+
+
+        const updateData = {
+          title: 'Updated Post',
+          content: '# Updated Content',
+          categoryId: 'non-existent-category-id',
+          tags: tagIds,
+        };
+
+        const response = await fetch(`${baseUrl}/posts/${post.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`,
+          },
+          body: JSON.stringify(updateData),
+        });
+
+        const finalPost = await prisma.post.findUnique({
+          where: { id: post.id },
+          include: { tags: true },
+        });
+
+        // With transaction fix: tags should be preserved (transaction rolls back)
+        // Without transaction: tags would be deleted and lost
+        expect(finalPost?.tags.length).toBe(2);
+      });
+
+      it('should preserve tags when post update fails due to duplicate slug', async () => {
+        // Get existing tags
+        const tags = await prisma.tag.findMany({ take: 2 });
+        const tagIds = tags.map(tag => tag.id);
+
+        // Create a post with tags
+        const post = await prisma.post.create({
+          data: {
+            title: 'Original Post',
+            content: '# Original Content',
+            slug: 'original-post',
+            published: false,
+            authorId: userId,
+            tags: {
+              create: tagIds.map(tagId => ({ tagId })),
+            },
+          },
+        });
+
+        // Verify initial tags exist
+        const initialPost = await prisma.post.findUnique({
+          where: { id: post.id },
+          include: { tags: true },
+        });
+        expect(initialPost?.tags.length).toBe(2);
+
+        const targetSlug = 'updated-post';
+        await prisma.post.create({
+          data: {
+            title: 'Duplicate Slug Post',
+            content: '# Content',
+            slug: targetSlug,
+            published: false,
+            authorId: userId,
+          },
+        });
+
+        const updateData = {
+          title: 'Updated Post',
+          content: '# Updated Content',
+          tags: tagIds,
+        };
+
+        const response = await fetch(`${baseUrl}/posts/${post.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`,
+          },
+          body: JSON.stringify(updateData),
+        });
+
+        const data: any = await response.json();
+
+        console.log('Response status:', response.status, data);
+
+
+        const finalPost = await prisma.post.findUnique({
+          where: { id: post.id },
+          include: { tags: true },
+        });
+
+
+        expect(finalPost?.tags.length).toBe(2);
+      });
+
+      it('should preserve tags when post update fails due to invalid tag reference after tag deletion', async () => {
+        // Get existing tags
+        const allTags = await prisma.tag.findMany({ take: 2 });
+        const originalTagIds = allTags.map(tag => tag.id);
+        const invalidTagId = 'invalid-tag-id';
+
+        // Create a post with initial tags
+        const post = await prisma.post.create({
+          data: {
+            title: 'Post with Tags',
+            content: '# Original Content',
+            slug: 'post-with-tags',
+            published: false,
+            authorId: userId,
+            tags: {
+              create: originalTagIds.map(tagId => ({ tagId })),
+            },
+          },
+        });
+
+        // Verify initial tags exist
+        const initialPost = await prisma.post.findUnique({
+          where: { id: post.id },
+          include: { tags: true },
+        });
+        expect(initialPost?.tags.length).toBe(2);
+
+        const updateData = {
+          title: 'Updated Post',
+          content: '# Updated Content',
+          tags: [invalidTagId],
+        };
+
+        const response = await fetch(`${baseUrl}/posts/${post.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`,
+          },
+          body: JSON.stringify(updateData),
+        });
+
+
+        const finalPost = await prisma.post.findUnique({
+          where: { id: post.id },
+          include: {
+            tags: {
+              include: {
+                tag: true,
+              },
+            },
+          },
+        });
+
+        // With transaction fix: original tags should be preserved (transaction rolls back)
+        // Without transaction: tags would be deleted and lost
+        expect(finalPost?.tags.length).toBe(2);
+      });
     });
   });
 
