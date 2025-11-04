@@ -1049,55 +1049,59 @@ router.put('/:id', validatePost, authenticateToken, handleValidationErrors, asyn
     slug = generateSlug(title);
   }
 
-  // Update tags if provided
-  if (tags !== undefined) {
-    // Delete all existing tags for this post
-    await prisma.postTag.deleteMany({
-      where: { postId: id },
-    });
-  }
+  // Update tags if provided - use transaction to ensure atomicity
+  // If post update fails, tags should not be deleted
+  const post = await prisma.$transaction(async (tx) => {
+    // Delete all existing tags for this post if tags are being updated
+    if (tags !== undefined) {
+      await tx.postTag.deleteMany({
+        where: { postId: id },
+      });
+    }
 
-  const post = await prisma.post.update({
-    where: { id },
-    data: {
-      title,
-      content,
-      slug,
-      published,
-      featured,
-      categoryId,
-      metaTitle,
-      metaDescription,
-      ogImage,
-      tags: tags !== undefined ? {
-        create: tags && tags.length > 0 ? tags.map((tagId: string) => ({ tagId })) : [],
-      } : undefined,
-    },
-    include: {
-      author: {
-        select: {
-          id: true,
-          username: true,
-        },
+    // Update post with new tags
+    return await tx.post.update({
+      where: { id },
+      data: {
+        title,
+        content,
+        slug,
+        published,
+        featured,
+        categoryId,
+        metaTitle,
+        metaDescription,
+        ogImage,
+        tags: tags !== undefined ? {
+          create: tags && tags.length > 0 ? tags.map((tagId: string) => ({ tagId })) : [],
+        } : undefined,
       },
-      category: {
-        select: {
-          id: true,
-          name: true,
-          slug: true,
+      include: {
+        author: {
+          select: {
+            id: true,
+            username: true,
+          },
         },
-      },
-      tags: {
-        include: {
-          tag: {
-            select: {
-              id: true,
-              name: true,
+        category: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+          },
+        },
+        tags: {
+          include: {
+            tag: {
+              select: {
+                id: true,
+                name: true,
+              },
             },
           },
         },
       },
-    },
+    });
   });
 
   invalidateCache.invalidateListCaches();
