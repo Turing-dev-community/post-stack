@@ -8,19 +8,21 @@ datasource db {
 }
 
 model User {
-  id        String      @id @default(cuid())
-  email     String      @unique
-  username  String      @unique
-  password  String
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
-  followers Follow[]    @relation("Follower")
-  following Follow[]    @relation("Following")
-  likes     PostLike[]
-  commentLikes CommentLike[]
-  savedPosts SavedPost[]
-  posts     Post[]
-  comments  Comment[]
+  id             String        @id @default(cuid())
+  email          String        @unique
+  username       String        @unique
+  password       String
+  profilePicture String?
+  about          String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  followers      Follow[]      @relation("Follower")
+  following      Follow[]      @relation("Following")
+  likes          PostLike[]
+  commentLikes   CommentLike[]
+  savedPosts     SavedPost[]
+  posts          Post[]
+  comments       Comment[]
 
   @@map("users")
 }
@@ -100,17 +102,17 @@ model SavedPost {
 }
 
 model Comment {
-  id        String    @id @default(cuid())
+  id        String        @id @default(cuid())
   content   String
   postId    String
   userId    String
   parentId  String?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  post      Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  parent    Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
-  replies   Comment[] @relation("CommentReplies")
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  post      Post          @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent    Comment?      @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies   Comment[]     @relation("CommentReplies")
   likes     CommentLike[]
 
   @@map("comments")

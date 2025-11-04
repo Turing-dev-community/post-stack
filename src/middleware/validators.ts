@@ -104,3 +104,14 @@ export const validateComment = [
     .isLength({ min: 1, max: 5000 })
     .withMessage("Comment content must be between 1 and 5000 characters"),
 ];
+
+export const validateProfileUpdate = [
+  body("profilePicture")
+    .optional({ nullable: true })
+    .isURL()
+    .withMessage("Profile picture must be a valid URL"),
+  body("about")
+    .optional({ nullable: true })
+    .isLength({ min: 10, max: 1000 })
+    .withMessage("About must be between 10 and 1000 characters"),
+];

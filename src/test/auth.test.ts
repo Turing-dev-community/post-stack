@@ -251,5 +251,189 @@ describe('Authentication Routes', () => {
       expect(response.status).toBe(403);
       expect(data).toHaveProperty('error', 'Invalid or expired token');
     });
+
+    it('should return profile with profilePicture and about fields', async () => {
+      const hashedPassword = await bcrypt.hash('Password123', 12);
+      const user = await prisma.user.create({
+        data: {
+          email: 'test@example.com',
+          username: 'testuser',
+          password: hashedPassword,
+          profilePicture: 'https://example.com/picture.jpg',
+          about: 'This is a test about section with sufficient length',
+        },
+      });
+
+      const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET!, { expiresIn: '1d' });
+
+      const response = await fetch(`${baseUrl}/auth/profile`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      const data: any = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.user).toHaveProperty('profilePicture', 'https://example.com/picture.jpg');
+      expect(data.user).toHaveProperty('about', 'This is a test about section with sufficient length');
+    });
+  });
+
+  describe('PUT /api/auth/profile', () => {
+    it('should update profile with valid profilePicture and about', async () => {
+      const hashedPassword = await bcrypt.hash('Password123', 12);
+      const user = await prisma.user.create({
+        data: {
+          email: 'test@example.com',
+          username: 'testuser',
+          password: hashedPassword,
+        },
+      });
+
+      const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET!, { expiresIn: '1d' });
+
+      const updateData = {
+        profilePicture: 'https://example.com/picture.jpg',
+        about: 'This is a test about section with sufficient length to pass validation',
+      };
+
+      const response = await fetch(`${baseUrl}/auth/profile`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(updateData),
+      });
+
+      const data: any = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data).toHaveProperty('message', 'Profile updated successfully');
+      expect(data.user).toHaveProperty('profilePicture', updateData.profilePicture);
+      expect(data.user).toHaveProperty('about', updateData.about);
+
+      // Verify in database
+      const updatedUser = await prisma.user.findUnique({
+        where: { id: user.id },
+      });
+      expect(updatedUser?.profilePicture).toBe(updateData.profilePicture);
+      expect(updatedUser?.about).toBe(updateData.about);
+    });
+
+    it('should reject invalid URL for profilePicture', async () => {
+      const hashedPassword = await bcrypt.hash('Password123', 12);
+      const user = await prisma.user.create({
+        data: {
+          email: 'test@example.com',
+          username: 'testuser',
+          password: hashedPassword,
+        },
+      });
+
+      const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET!, { expiresIn: '1d' });
+
+      const updateData = {
+        profilePicture: 'not-a-valid-url',
+        about: 'This is a test about section with sufficient length',
+      };
+
+      const response = await fetch(`${baseUrl}/auth/profile`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(updateData),
+      });
+
+      const data: any = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(data).toHaveProperty('error', 'Validation failed');
+    });
+
+    it('should reject about text that is too short', async () => {
+      const hashedPassword = await bcrypt.hash('Password123', 12);
+      const user = await prisma.user.create({
+        data: {
+          email: 'test@example.com',
+          username: 'testuser',
+          password: hashedPassword,
+        },
+      });
+
+      const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET!, { expiresIn: '1d' });
+
+      const updateData = {
+        about: 'short',
+      };
+
+      const response = await fetch(`${baseUrl}/auth/profile`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(updateData),
+      });
+
+      const data: any = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(data).toHaveProperty('error', 'Validation failed');
+    });
+
+    it('should reject about text that is too long', async () => {
+      const hashedPassword = await bcrypt.hash('Password123', 12);
+      const user = await prisma.user.create({
+        data: {
+          email: 'test@example.com',
+          username: 'testuser',
+          password: hashedPassword,
+        },
+      });
+
+      const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET!, { expiresIn: '1d' });
+
+      const updateData = {
+        about: 'a'.repeat(1001), // 1001 characters, exceeds max of 1000
+      };
+
+      const response = await fetch(`${baseUrl}/auth/profile`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(updateData),
+      });
+
+      const data: any = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(data).toHaveProperty('error', 'Validation failed');
+    });
+
+    it('should require authentication to update profile', async () => {
+      const updateData = {
+        profilePicture: 'https://example.com/picture.jpg',
+        about: 'This is a test about section with sufficient length',
+      };
+
+      const response = await fetch(`${baseUrl}/auth/profile`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updateData),
+      });
+
+      expect(response.status).toBe(401);
+      const data: any = await response.json();
+      expect(data).toHaveProperty('error', 'Access token required');
+    });
   });
 });
