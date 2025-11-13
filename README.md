@@ -292,7 +292,3 @@ blog-backend/
 ├── uploads/             # Uploaded image files
 └── dist/                # Compiled JavaScript (generated)
 ```
-
-## License
-
-MIT
