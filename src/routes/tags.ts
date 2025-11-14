@@ -1,9 +1,8 @@
 import { Router, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { asyncHandler } from '../middleware/validation';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 router.get('/', asyncHandler(async (req: any, res: Response) => {
   const searchQuery = req.query.search as string;
