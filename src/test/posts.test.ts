@@ -1100,6 +1100,53 @@ describe('Blog Post Routes', () => {
       expect(post?.authorId).toBe(userId);
     });
 
+    it('should trim title and content on creation', async () => {
+      const postData = {
+        title: '   Trimmed Title   ',
+        content: '   # Trimmed Content   ',
+        published: false,
+      };
+
+      const response = await fetch(`${baseUrl}/posts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`,
+        },
+        body: JSON.stringify(postData),
+      });
+
+      const data: any = await response.json();
+
+      expect(response.status).toBe(201);
+      expect(data).toHaveProperty('post');
+      expect(data.post.title).toBe('Trimmed Title');
+      expect(data.post.content).toBe('# Trimmed Content');
+      expect(data.post.slug).toBe('trimmed-title');
+    });
+
+    it('should reject title with only whitespace', async () => {
+      const postData = {
+        title: '    ',
+        content: '# Content',
+        published: false,
+      };
+
+      const response = await fetch(`${baseUrl}/posts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`,
+        },
+        body: JSON.stringify(postData),
+      });
+
+      const data: any = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(data).toHaveProperty('error', 'Validation failed');
+    });
+
     it('should return error when not authenticated', async () => {
       const postData = {
         title: 'New Test Post',

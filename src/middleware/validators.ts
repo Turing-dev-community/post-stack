@@ -32,9 +32,10 @@ export const validateLogin = [
 
 export const validatePost = [
   body("title")
+    .trim()
     .isLength({ min: 1, max: 200 })
     .withMessage("Title must be between 1 and 200 characters"),
-  body("content").isLength({ min: 1 }).withMessage("Content is required"),
+  body("content").trim().isLength({ min: 1 }).withMessage("Content is required"),
   body("published")
     .optional()
     .isBoolean()
