@@ -1,4 +1,4 @@
-import { body } from "express-validator";
+import { body, query } from "express-validator";
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
@@ -102,4 +102,17 @@ export const validateProfileUpdate = [
     .optional({ nullable: true })
     .isLength({ min: 10, max: 1000 })
     .withMessage("About must be between 10 and 1000 characters"),
+];
+
+export const validatePagination = [
+  query("page")
+    .optional()
+    .isInt({ min: 1 })
+    .withMessage("Page must be a positive integer greater than 0")
+    .toInt(),
+  query("limit")
+    .optional()
+    .isInt({ min: 1, max: 100 })
+    .withMessage("Limit must be between 1 and 100")
+    .toInt(),
 ];

@@ -1,7 +1,8 @@
 import { Router, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authenticateToken } from '../utils/auth';
-import { asyncHandler } from '../middleware/validation';
+import { asyncHandler, handleValidationErrors } from '../middleware/validation';
+import { validatePagination } from '../middleware/validators';
 import { AuthRequest } from '../utils/auth';
 
 const router = Router();
@@ -103,7 +104,7 @@ router.delete('/:userId/follow', authenticateToken, asyncHandler(async (req: Aut
   });
 }));
 
-router.get('/:userId/followers', asyncHandler(async (req: AuthRequest, res: Response) => {
+router.get('/:userId/followers', validatePagination, handleValidationErrors, asyncHandler(async (req: AuthRequest, res: Response) => {
   const { userId } = req.params;
   const page = parseInt(req.query.page as string) || 1;
   const limit = parseInt(req.query.limit as string) || 20;
@@ -146,7 +147,7 @@ router.get('/:userId/followers', asyncHandler(async (req: AuthRequest, res: Resp
   });
 }));
 
-router.get('/:userId/following', asyncHandler(async (req: AuthRequest, res: Response) => {
+router.get('/:userId/following', validatePagination, handleValidationErrors, asyncHandler(async (req: AuthRequest, res: Response) => {
   const { userId } = req.params;
   const page = parseInt(req.query.page as string) || 1;
   const limit = parseInt(req.query.limit as string) || 20;
