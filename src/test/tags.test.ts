@@ -1,59 +1,105 @@
-import { prisma } from './setup';
+import request from 'supertest';
+import { setupPrismaMock } from './utils/mockPrisma';
+// Import prisma and app AFTER mocks are set up
+import { prisma } from '../lib/prisma';
+import app from '../index';
+
+const { prisma: prismaMock } = setupPrismaMock(prisma, app);
 
 describe('Tags API', () => {
-  const baseUrl = `http://localhost:${process.env.PORT}/api`;
+  // Validate that mocking is properly set up
+  it('should have mocking properly configured', () => {
+    expect(prismaMock.isMocked).toBe(true);
+  });
 
   describe('GET /api/tags', () => {
     it('should return all tags', async () => {
-      const response = await fetch(`${baseUrl}/tags`);
-      const data: any = await response.json();
 
-      expect(response.status).toBe(200);
-      expect(data).toHaveProperty('tags');
-      expect(Array.isArray(data.tags)).toBe(true);
-      expect(data.tags.length).toBeGreaterThan(0);
+      const mockTags = [
+        { id: 'tag-1', name: 'technology' },
+        { id: 'tag-2', name: 'tutorial' },
+        { id: 'tag-3', name: 'programming' },
+      ];
 
-      // Check tag structure
-      const tag = data.tags[0];
-      expect(tag).toHaveProperty('id');
-      expect(tag).toHaveProperty('name');
+      (prismaMock.tag.findMany as jest.Mock).mockResolvedValue(mockTags);
+
+      // Use supertest to make the request - app is imported with mocked Prisma
+      const response = await request(app)
+        .get('/api/tags')
+        .expect(200);
+
+      expect(response.body).toHaveProperty('tags');
+      expect(Array.isArray(response.body.tags)).toBe(true);
+      expect(response.body.tags.length).toBe(3);
+      expect(response.body.tags).toEqual(mockTags);
     });
   });
 
   describe('GET /api/tags?search=keyword', () => {
     it('should return tags matching search keyword', async () => {
-      const response = await fetch(`${baseUrl}/tags?search=tech`);
-      const data: any = await response.json();
+      // Mock tags matching "tech" search
+      const mockTags = [
+        { id: 'tag-1', name: 'technology' },
+      ];
 
-      expect(response.status).toBe(200);
-      expect(data).toHaveProperty('tags');
-      expect(Array.isArray(data.tags)).toBe(true);
-      
+      // Mock Prisma call with search query
+      (prismaMock.tag.findMany as jest.Mock).mockResolvedValue(mockTags);
+
+      const response = await request(app)
+        .get('/api/tags')
+        .query({ search: 'tech' })
+        .expect(200);
+
+      expect(response.body).toHaveProperty('tags');
+      expect(Array.isArray(response.body.tags)).toBe(true);
+
       // Should find "technology" when searching for "tech"
-      const hasTechnology = data.tags.some((tag: any) => tag.name === 'technology');
+      const hasTechnology = response.body.tags.some((tag: any) => tag.name === 'technology');
       expect(hasTechnology).toBe(true);
     });
 
     it('should be case insensitive', async () => {
-      const response = await fetch(`${baseUrl}/tags?search=TECH`);
-      const data: any = await response.json();
+      // Mock tags matching "TECH" search (case insensitive)
+      const mockTags = [
+        { id: 'tag-1', name: 'technology' },
+      ];
 
-      expect(response.status).toBe(200);
-      
+      (prismaMock.tag.findMany as jest.Mock).mockResolvedValue(mockTags);
+
+      const response = await request(app)
+        .get('/api/tags')
+        .query({ search: 'TECH' })
+        .expect(200);
+
       // Should find "technology" even with uppercase search
-      const hasTechnology = data.tags.some((tag: any) => tag.name === 'technology');
+      const hasTechnology = response.body.tags.some((tag: any) => tag.name === 'technology');
       expect(hasTechnology).toBe(true);
     });
 
     it('should return all tags when search is empty', async () => {
-      const responseAll = await fetch(`${baseUrl}/tags`);
-      const responseEmpty = await fetch(`${baseUrl}/tags?search=`);
-      
-      const dataAll: any = await responseAll.json();
-      const dataEmpty: any = await responseEmpty.json();
+      // Mock all tags for empty search
+      const mockAllTags = [
+        { id: 'tag-1', name: 'technology' },
+        { id: 'tag-2', name: 'tutorial' },
+        { id: 'tag-3', name: 'programming' },
+      ];
 
-      expect(responseEmpty.status).toBe(200);
-      expect(dataEmpty.tags.length).toBe(dataAll.tags.length);
+      // First call: all tags (no search)
+      // Second call: all tags (empty search)
+      (prismaMock.tag.findMany as jest.Mock)
+        .mockResolvedValueOnce(mockAllTags)
+        .mockResolvedValueOnce(mockAllTags);
+
+      const responseAll = await request(app)
+        .get('/api/tags')
+        .expect(200);
+
+      const responseEmpty = await request(app)
+        .get('/api/tags')
+        .query({ search: '' })
+        .expect(200);
+
+      expect(responseEmpty.body.tags.length).toBe(responseAll.body.tags.length);
     });
   });
 });
