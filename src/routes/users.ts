@@ -33,6 +33,14 @@ router.post('/:userId/follow', authenticateToken, asyncHandler(async (req: AuthR
     });
   }
 
+  // Check if user account is deactivated
+  if (userToFollow.deletedAt) {
+    return res.status(404).json({
+      error: 'User not found',
+      message: 'This user account has been deactivated.',
+    });
+  }
+
   const existingFollow = await prisma.follow.findFirst({
     where: {
       followerId,

@@ -46,7 +46,12 @@ export const authenticateToken = async (
 
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId },
-      select: { id: true, email: true, username: true },
+      select: { 
+        id: true, 
+        email: true, 
+        username: true, 
+        deletedAt: true 
+      },
     });
 
     if (!user) {
@@ -54,10 +59,17 @@ export const authenticateToken = async (
       return;
     }
 
+    // Check if account is deactivated
+    if (user.deletedAt) {
+      res.status(403).json({ error: 'Account has been deactivated' });
+      return;
+    }
+
     req.user = user;
     next();
   } catch (error) {
     res.status(403).json({ error: 'Invalid or expired token' });
+    return;
   }
 };
 

@@ -436,4 +436,134 @@ describe('Authentication Routes', () => {
       expect(data).toHaveProperty('error', 'Access token required');
     });
   });
+
+  describe('DELETE /api/auth/account', () => {
+    it('should deactivate account when authenticated', async () => {
+      const hashedPassword = await bcrypt.hash('Password123', 12);
+      const user = await prisma.user.create({
+        data: {
+          email: 'test@example.com',
+          username: 'testuser',
+          password: hashedPassword,
+        },
+      });
+
+      const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET!, { expiresIn: '1d' });
+
+      const response = await fetch(`${baseUrl}/auth/account`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      const data: any = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data).toHaveProperty('message', 'Account deactivated successfully');
+      expect(data).toHaveProperty('note');
+
+      // Verify account is deactivated in database
+      const deactivatedUser = await prisma.user.findUnique({
+        where: { id: user.id },
+      });
+      expect(deactivatedUser?.deletedAt).toBeTruthy();
+    });
+
+    it('should return error when not authenticated', async () => {
+      const response = await fetch(`${baseUrl}/auth/account`, {
+        method: 'DELETE',
+      });
+
+      expect(response.status).toBe(401);
+      const data: any = await response.json();
+      expect(data).toHaveProperty('error', 'Access token required');
+    });
+
+    it('should return error when trying to deactivate already deactivated account', async () => {
+      const hashedPassword = await bcrypt.hash('Password123', 12);
+      const user = await prisma.user.create({
+        data: {
+          email: 'test@example.com',
+          username: 'testuser',
+          password: hashedPassword,
+          deletedAt: new Date(),
+        },
+      });
+
+      const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET!, { expiresIn: '1d' });
+
+      const response = await fetch(`${baseUrl}/auth/account`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      expect(response.status).toBe(403);
+      const data: any = await response.json();
+      expect(data).toHaveProperty('error', 'Account has been deactivated');
+    });
+
+    it('should prevent login after account deactivation', async () => {
+      const hashedPassword = await bcrypt.hash('Password123', 12);
+      const user = await prisma.user.create({
+        data: {
+          email: 'test@example.com',
+          username: 'testuser',
+          password: hashedPassword,
+          deletedAt: new Date(),
+        },
+      });
+
+      const loginData = {
+        email: 'test@example.com',
+        password: 'Password123',
+      };
+
+      const response = await fetch(`${baseUrl}/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(loginData),
+      });
+
+      const data: any = await response.json();
+
+      expect(response.status).toBe(403);
+      expect(data).toHaveProperty('error', 'Account has been deactivated');
+    });
+
+    it('should prevent authentication with token after account deactivation', async () => {
+      const hashedPassword = await bcrypt.hash('Password123', 12);
+      const user = await prisma.user.create({
+        data: {
+          email: 'test@example.com',
+          username: 'testuser',
+          password: hashedPassword,
+        },
+      });
+
+      const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET!, { expiresIn: '1d' });
+
+      // Deactivate account
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { deletedAt: new Date() },
+      });
+
+      // Try to access protected endpoint
+      const response = await fetch(`${baseUrl}/auth/profile`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      expect(response.status).toBe(403);
+      const data: any = await response.json();
+      expect(data).toHaveProperty('error', 'Account has been deactivated');
+    });
+  });
 });
