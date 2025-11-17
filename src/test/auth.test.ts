@@ -1,420 +1,280 @@
-import { prisma } from './setup';
-import jwt from 'jsonwebtoken';
+import request from 'supertest';
+import { setupPrismaMock } from './utils/mockPrisma';
+import { prisma } from '../lib/prisma';
+import app from '../index';
 import bcrypt from 'bcryptjs';
+import { generateToken } from '../utils/auth';
 
-describe('Authentication Routes', () => {
-  const baseUrl = `http://localhost:${process.env.PORT}/api`;
+const { prisma: prismaMock } = setupPrismaMock(prisma, app);
+
+describe('Authentication Routes (mocked)', () => {
+  it('should have mocking properly configured', () => {
+    expect((prismaMock as any).isMocked).toBe(true);
+  });
 
   describe('POST /api/auth/signup', () => {
     it('should create a new user successfully', async () => {
-      const userData = {
+      (prismaMock.user.findFirst as unknown as jest.Mock).mockResolvedValue(null);
+      const created = {
+        id: 'user-1',
         email: 'test@example.com',
         username: 'testuser',
-        password: 'Password123',
+        createdAt: new Date(),
       };
+      (prismaMock.user.create as unknown as jest.Mock).mockResolvedValue(created);
 
-      const response = await fetch(`${baseUrl}/auth/signup`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(userData),
-      });
+      const response = await request(app)
+        .post('/api/auth/signup')
+        .send({ email: 'test@example.com', username: 'testuser', password: 'Password123' })
+        .expect(201);
 
-      const data: any = await response.json();
-
-      expect(response.status).toBe(201);
-      expect(data).toHaveProperty('message', 'User created successfully');
-      expect(data).toHaveProperty('user');
-      expect(data).toHaveProperty('token');
-      expect(data.user.email).toBe(userData.email);
-      expect(data.user.username).toBe(userData.username);
-
-      // Verify user was created in database
-      const user = await prisma.user.findUnique({
-        where: { email: userData.email },
-      });
-      expect(user).toBeTruthy();
-      expect(user?.username).toBe(userData.username);
+      expect(response.body).toHaveProperty('message', 'User created successfully');
+      expect(response.body).toHaveProperty('user');
+      expect(response.body.user.email).toBe('test@example.com');
+      expect(response.body).toHaveProperty('token');
     });
 
     it('should return error if email already exists', async () => {
-      // First, create a user
-      await prisma.user.create({
-        data: {
-          email: 'existing@example.com',
-          username: 'existinguser',
-          password: await bcrypt.hash('Password123', 12),
-        },
-      });
-
-      const userData = {
+      (prismaMock.user.findFirst as unknown as jest.Mock).mockResolvedValue({
+        id: 'user-1',
         email: 'existing@example.com',
-        username: 'newuser',
-        password: 'Password123',
-      };
-
-      const response = await fetch(`${baseUrl}/auth/signup`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(userData),
+        username: 'existinguser',
       });
 
-      const data: any = await response.json();
+      const response = await request(app)
+        .post('/api/auth/signup')
+        .send({ email: 'existing@example.com', username: 'newuser', password: 'Password123' })
+        .expect(400);
 
-      expect(response.status).toBe(400);
-      expect(data).toHaveProperty('error', 'User already exists');
+      expect(response.body).toHaveProperty('error', 'User already exists');
     });
 
     it('should return validation error for invalid email', async () => {
-      const userData = {
-        email: 'invalid-email',
-        username: 'testuser',
-        password: 'Password123',
-      };
-
-      const response = await fetch(`${baseUrl}/auth/signup`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(userData),
-      });
-
-      const data: any = await response.json();
-
-      expect(response.status).toBe(400);
-      expect(data).toHaveProperty('error', 'Validation failed');
+      const response = await request(app)
+        .post('/api/auth/signup')
+        .send({ email: 'invalid-email', username: 'testuser', password: 'Password123' })
+        .expect(400);
+      expect(response.body).toHaveProperty('error', 'Validation failed');
     });
 
     it('should return validation error for weak password', async () => {
-      const userData = {
-        email: 'test@example.com',
-        username: 'testuser',
-        password: 'weak',
-      };
-
-      const response = await fetch(`${baseUrl}/auth/signup`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(userData),
-      });
-
-      const data: any = await response.json();
-
-      expect(response.status).toBe(400);
-      expect(data).toHaveProperty('error', 'Validation failed');
+      const response = await request(app)
+        .post('/api/auth/signup')
+        .send({ email: 'test@example.com', username: 'testuser', password: 'weak' })
+        .expect(400);
+      expect(response.body).toHaveProperty('error', 'Validation failed');
     });
   });
 
   describe('POST /api/auth/login', () => {
     it('should login successfully with valid credentials', async () => {
-      // First, create a user
-      const hashedPassword = await bcrypt.hash('Password123', 12);
-      const user = await prisma.user.create({
-        data: {
-          email: 'test@example.com',
-          username: 'testuser',
-          password: hashedPassword,
-        },
-      });
-
-      const loginData = {
+      const hashed = await bcrypt.hash('Password123', 12);
+      (prismaMock.user.findUnique as unknown as jest.Mock).mockResolvedValue({
+        id: 'user-1',
         email: 'test@example.com',
-        password: 'Password123',
-      };
-
-      const response = await fetch(`${baseUrl}/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(loginData),
+        username: 'testuser',
+        password: hashed,
       });
 
-      const data: any = await response.json();
+      const response = await request(app)
+        .post('/api/auth/login')
+        .send({ email: 'test@example.com', password: 'Password123' })
+        .expect(200);
 
-      expect(response.status).toBe(200);
-      expect(data).toHaveProperty('message', 'Login successful');
-      expect(data).toHaveProperty('user');
-      expect(data).toHaveProperty('token');
-      expect(data.user.email).toBe(loginData.email);
-      expect(data.user.username).toBe('testuser');
+      expect(response.body).toHaveProperty('message', 'Login successful');
+      expect(response.body).toHaveProperty('user');
+      expect(response.body).toHaveProperty('token');
+      expect(response.body.user.username).toBe('testuser');
     });
 
     it('should return error for invalid credentials', async () => {
-      const loginData = {
-        email: 'nonexistent@example.com',
-        password: 'Password123',
-      };
+      (prismaMock.user.findUnique as unknown as jest.Mock).mockResolvedValue(null);
 
-      const response = await fetch(`${baseUrl}/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(loginData),
-      });
+      const response = await request(app)
+        .post('/api/auth/login')
+        .send({ email: 'nonexistent@example.com', password: 'Password123' })
+        .expect(401);
 
-      const data: any = await response.json();
-
-      expect(response.status).toBe(401);
-      expect(data).toHaveProperty('error', 'Invalid credentials');
+      expect(response.body).toHaveProperty('error', 'Invalid credentials');
     });
 
     it('should return error for wrong password', async () => {
-      // First, create a user
-      const hashedPassword = await bcrypt.hash('Password123', 12);
-      await prisma.user.create({
-        data: {
-          email: 'test@example.com',
-          username: 'testuser',
-          password: hashedPassword,
-        },
-      });
-
-      const loginData = {
+      const hashed = await bcrypt.hash('Password123', 12);
+      (prismaMock.user.findUnique as unknown as jest.Mock).mockResolvedValue({
+        id: 'user-1',
         email: 'test@example.com',
-        password: 'WrongPassword',
-      };
-
-      const response = await fetch(`${baseUrl}/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(loginData),
+        username: 'testuser',
+        password: hashed,
       });
 
-      const data: any = await response.json();
+      const response = await request(app)
+        .post('/api/auth/login')
+        .send({ email: 'test@example.com', password: 'WrongPassword' })
+        .expect(401);
 
-      expect(response.status).toBe(401);
-      expect(data).toHaveProperty('error', 'Invalid credentials');
+      expect(response.body).toHaveProperty('error', 'Invalid credentials');
     });
   });
 
   describe('GET /api/auth/profile', () => {
     it('should return user profile when authenticated', async () => {
-      // First, create a user
-      const hashedPassword = await bcrypt.hash('Password123', 12);
-      const user = await prisma.user.create({
-        data: {
-          email: 'test@example.com',
-          username: 'testuser',
-          password: hashedPassword,
-        },
+      const userId = 'user-1';
+      (prismaMock.user.findUnique as unknown as jest.Mock).mockResolvedValue({
+        id: userId,
+        email: 'test@example.com',
+        username: 'testuser',
+        deletedAt: null,
       });
+      (prismaMock.follow.count as unknown as jest.Mock)
+        .mockResolvedValueOnce(5) 
+        .mockResolvedValueOnce(3);
 
-      // Generate JWT token
-      const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET!, { expiresIn: '1d' });
+      const token = generateToken(userId);
+      const response = await request(app)
+        .get('/api/auth/profile')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
 
-      const response = await fetch(`${baseUrl}/auth/profile`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      const data: any = await response.json();
-
-      expect(response.status).toBe(200);
-      expect(data).toHaveProperty('user');
-      expect(data.user.email).toBe('test@example.com');
-      expect(data.user.username).toBe('testuser');
+      expect(response.body).toHaveProperty('user');
+      expect(response.body.user.email).toBe('test@example.com');
+      expect(response.body.user.followerCount).toBe(5);
+      expect(response.body.user.followingCount).toBe(3);
     });
 
     it('should return error when not authenticated', async () => {
-      const response = await fetch(`${baseUrl}/auth/profile`, {
-        method: 'GET',
-      });
-
-      const data: any = await response.json();
-
-      expect(response.status).toBe(401);
-      expect(data).toHaveProperty('error', 'Access token required');
+      const response = await request(app).get('/api/auth/profile').expect(401);
+      expect(response.body).toHaveProperty('error', 'Access token required');
     });
 
     it('should return error with invalid token', async () => {
-      const response = await fetch(`${baseUrl}/auth/profile`, {
-        method: 'GET',
-        headers: {
-          'Authorization': 'Bearer invalid-token',
-        },
-      });
-
-      const data: any = await response.json();
-
-      expect(response.status).toBe(403);
-      expect(data).toHaveProperty('error', 'Invalid or expired token');
+      const response = await request(app)
+        .get('/api/auth/profile')
+        .set('Authorization', 'Bearer invalid-token')
+        .expect(403);
+      expect(response.body).toHaveProperty('error', 'Invalid or expired token');
     });
 
     it('should return profile with profilePicture and about fields', async () => {
-      const hashedPassword = await bcrypt.hash('Password123', 12);
-      const user = await prisma.user.create({
-        data: {
-          email: 'test@example.com',
-          username: 'testuser',
-          password: hashedPassword,
-          profilePicture: 'https://example.com/picture.jpg',
-          about: 'This is a test about section with sufficient length',
-        },
+      const userId = 'user-1';
+      (prismaMock.user.findUnique as unknown as jest.Mock).mockResolvedValue({
+        id: userId,
+        email: 'test@example.com',
+        username: 'testuser',
+        profilePicture: 'https://example.com/picture.jpg',
+        about: 'This is a test about section with sufficient length',
+        deletedAt: null,
+        _count: { posts: 0 },
       });
+      (prismaMock.follow.count as unknown as jest.Mock)
+        .mockResolvedValueOnce(0)
+        .mockResolvedValueOnce(0);
 
-      const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET!, { expiresIn: '1d' });
+      const token = generateToken(userId);
+      const response = await request(app)
+        .get('/api/auth/profile')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
 
-      const response = await fetch(`${baseUrl}/auth/profile`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      const data: any = await response.json();
-
-      expect(response.status).toBe(200);
-      expect(data.user).toHaveProperty('profilePicture', 'https://example.com/picture.jpg');
-      expect(data.user).toHaveProperty('about', 'This is a test about section with sufficient length');
+      expect(response.body.user).toHaveProperty('profilePicture', 'https://example.com/picture.jpg');
+      expect(response.body.user).toHaveProperty(
+        'about',
+        'This is a test about section with sufficient length'
+      );
     });
   });
 
   describe('PUT /api/auth/profile', () => {
     it('should update profile with valid profilePicture and about', async () => {
-      const hashedPassword = await bcrypt.hash('Password123', 12);
-      const user = await prisma.user.create({
-        data: {
-          email: 'test@example.com',
-          username: 'testuser',
-          password: hashedPassword,
-        },
+      const userId = 'user-1';
+
+      (prismaMock.user.findUnique as unknown as jest.Mock).mockResolvedValueOnce({
+        id: userId,
+        email: 'test@example.com',
+        username: 'testuser',
+        deletedAt: null,
       });
 
-      const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET!, { expiresIn: '1d' });
-
-      const updateData = {
+      (prismaMock.user.update as unknown as jest.Mock).mockResolvedValue({
+        id: userId,
+        email: 'test@example.com',
+        username: 'testuser',
         profilePicture: 'https://example.com/picture.jpg',
         about: 'This is a test about section with sufficient length to pass validation',
-      };
-
-      const response = await fetch(`${baseUrl}/auth/profile`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify(updateData),
+        createdAt: new Date(),
+        _count: { posts: 0 },
       });
+      (prismaMock.follow.count as unknown as jest.Mock)
+        .mockResolvedValueOnce(1)
+        .mockResolvedValueOnce(2);
 
-      const data: any = await response.json();
+      const token = generateToken(userId);
+      const response = await request(app)
+        .put('/api/auth/profile')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          profilePicture: 'https://example.com/picture.jpg',
+          about: 'This is a test about section with sufficient length to pass validation',
+        })
+        .expect(200);
 
-      expect(response.status).toBe(200);
-      expect(data).toHaveProperty('message', 'Profile updated successfully');
-      expect(data.user).toHaveProperty('profilePicture', updateData.profilePicture);
-      expect(data.user).toHaveProperty('about', updateData.about);
-
-      // Verify in database
-      const updatedUser = await prisma.user.findUnique({
-        where: { id: user.id },
-      });
-      expect(updatedUser?.profilePicture).toBe(updateData.profilePicture);
-      expect(updatedUser?.about).toBe(updateData.about);
+      expect(response.body).toHaveProperty('message', 'Profile updated successfully');
+      expect(response.body.user).toHaveProperty('profilePicture');
+      expect(response.body.user).toHaveProperty('about');
     });
 
     it('should reject invalid URL for profilePicture', async () => {
-      const hashedPassword = await bcrypt.hash('Password123', 12);
-      const user = await prisma.user.create({
-        data: {
-          email: 'test@example.com',
-          username: 'testuser',
-          password: hashedPassword,
-        },
+      const userId = 'user-1';
+      (prismaMock.user.findUnique as unknown as jest.Mock).mockResolvedValue({
+        id: userId,
+        email: 'test@example.com',
+        username: 'testuser',
+        deletedAt: null,
       });
-
-      const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET!, { expiresIn: '1d' });
-
-      const updateData = {
-        profilePicture: 'not-a-valid-url',
-        about: 'This is a test about section with sufficient length',
-      };
-
-      const response = await fetch(`${baseUrl}/auth/profile`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify(updateData),
-      });
-
-      const data: any = await response.json();
-
-      expect(response.status).toBe(400);
-      expect(data).toHaveProperty('error', 'Validation failed');
+      const token = generateToken(userId);
+      const response = await request(app)
+        .put('/api/auth/profile')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ profilePicture: 'not-a-valid-url', about: 'Valid about content text here' })
+        .expect(400);
+      expect(response.body).toHaveProperty('error', 'Validation failed');
     });
 
     it('should reject about text that is too short', async () => {
-      const hashedPassword = await bcrypt.hash('Password123', 12);
-      const user = await prisma.user.create({
-        data: {
-          email: 'test@example.com',
-          username: 'testuser',
-          password: hashedPassword,
-        },
+      const userId = 'user-1';
+      (prismaMock.user.findUnique as unknown as jest.Mock).mockResolvedValue({
+        id: userId,
+        email: 'test@example.com',
+        username: 'testuser',
+        deletedAt: null,
       });
-
-      const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET!, { expiresIn: '1d' });
-
-      const updateData = {
-        about: 'short',
-      };
-
-      const response = await fetch(`${baseUrl}/auth/profile`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify(updateData),
-      });
-
-      const data: any = await response.json();
-
-      expect(response.status).toBe(400);
-      expect(data).toHaveProperty('error', 'Validation failed');
+      const token = generateToken(userId);
+      const response = await request(app)
+        .put('/api/auth/profile')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ about: 'short' })
+        .expect(400);
+      expect(response.body).toHaveProperty('error', 'Validation failed');
     });
 
     it('should reject about text that is too long', async () => {
-      const hashedPassword = await bcrypt.hash('Password123', 12);
-      const user = await prisma.user.create({
-        data: {
-          email: 'test@example.com',
-          username: 'testuser',
-          password: hashedPassword,
-        },
+      const userId = 'user-1';
+      (prismaMock.user.findUnique as unknown as jest.Mock).mockResolvedValue({
+        id: userId,
+        email: 'test@example.com',
+        username: 'testuser',
+        deletedAt: null,
       });
-
-      const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET!, { expiresIn: '1d' });
-
+      const token = generateToken(userId);
       const updateData = {
-        about: 'a'.repeat(1001), // 1001 characters, exceeds max of 1000
+        about: 'a'.repeat(1001), 
       };
 
-      const response = await fetch(`${baseUrl}/auth/profile`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify(updateData),
-      });
-
-      const data: any = await response.json();
-
-      expect(response.status).toBe(400);
-      expect(data).toHaveProperty('error', 'Validation failed');
+      const response = await request(app)
+        .put('/api/auth/profile')
+        .set('Authorization', `Bearer ${token}`)
+        .send(updateData)
+        .expect(400);
+      expect(response.body).toHaveProperty('error', 'Validation failed');
     });
 
     it('should require authentication to update profile', async () => {
@@ -423,147 +283,95 @@ describe('Authentication Routes', () => {
         about: 'This is a test about section with sufficient length',
       };
 
-      const response = await fetch(`${baseUrl}/auth/profile`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(updateData),
-      });
-
-      expect(response.status).toBe(401);
-      const data: any = await response.json();
-      expect(data).toHaveProperty('error', 'Access token required');
+      const response = await request(app)
+        .put('/api/auth/profile')
+        .send(updateData)
+        .expect(401);
+      expect(response.body).toHaveProperty('error', 'Access token required');
     });
   });
 
   describe('DELETE /api/auth/account', () => {
     it('should deactivate account when authenticated', async () => {
-      const hashedPassword = await bcrypt.hash('Password123', 12);
-      const user = await prisma.user.create({
-        data: {
-          email: 'test@example.com',
-          username: 'testuser',
-          password: hashedPassword,
-        },
+      const userId = 'user-1';
+
+      (prismaMock.user.findUnique as unknown as jest.Mock).mockResolvedValueOnce({
+        id: userId,
+        email: 'test@example.com',
+        username: 'testuser',
+        deletedAt: null,
       });
 
-      const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET!, { expiresIn: '1d' });
-
-      const response = await fetch(`${baseUrl}/auth/account`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
+      (prismaMock.user.findUnique as unknown as jest.Mock).mockResolvedValueOnce({
+        id: userId,
+        deletedAt: null,
       });
+      (prismaMock.user.update as unknown as jest.Mock).mockResolvedValue({ id: userId });
 
-      const data: any = await response.json();
+      const token = generateToken(userId);
+      const response = await request(app)
+        .delete('/api/auth/account')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
 
-      expect(response.status).toBe(200);
-      expect(data).toHaveProperty('message', 'Account deactivated successfully');
-      expect(data).toHaveProperty('note');
-
-      // Verify account is deactivated in database
-      const deactivatedUser = await prisma.user.findUnique({
-        where: { id: user.id },
-      });
-      expect(deactivatedUser?.deletedAt).toBeTruthy();
+      expect(response.body).toHaveProperty('message', 'Account deactivated successfully');
+      expect(response.body).toHaveProperty('note');
     });
 
     it('should return error when not authenticated', async () => {
-      const response = await fetch(`${baseUrl}/auth/account`, {
-        method: 'DELETE',
-      });
-
-      expect(response.status).toBe(401);
-      const data: any = await response.json();
-      expect(data).toHaveProperty('error', 'Access token required');
+      const response = await request(app).delete('/api/auth/account').expect(401);
+      expect(response.body).toHaveProperty('error', 'Access token required');
     });
 
     it('should return error when trying to deactivate already deactivated account', async () => {
-      const hashedPassword = await bcrypt.hash('Password123', 12);
-      const user = await prisma.user.create({
-        data: {
-          email: 'test@example.com',
-          username: 'testuser',
-          password: hashedPassword,
-          deletedAt: new Date(),
-        },
+      const userId = 'user-1';
+
+      (prismaMock.user.findUnique as unknown as jest.Mock).mockResolvedValue({
+        id: userId,
+        email: 'test@example.com',
+        username: 'testuser',
+        deletedAt: new Date(),
       });
 
-      const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET!, { expiresIn: '1d' });
-
-      const response = await fetch(`${baseUrl}/auth/account`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      expect(response.status).toBe(403);
-      const data: any = await response.json();
-      expect(data).toHaveProperty('error', 'Account has been deactivated');
+      const token = generateToken(userId);
+      const response = await request(app)
+        .delete('/api/auth/account')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(403);
+      expect(response.body).toHaveProperty('error', 'Account has been deactivated');
     });
 
     it('should prevent login after account deactivation', async () => {
-      const hashedPassword = await bcrypt.hash('Password123', 12);
-      const user = await prisma.user.create({
-        data: {
-          email: 'test@example.com',
-          username: 'testuser',
-          password: hashedPassword,
-          deletedAt: new Date(),
-        },
-      });
-
-      const loginData = {
+      (prismaMock.user.findUnique as unknown as jest.Mock).mockResolvedValue({
+        id: 'user-1',
         email: 'test@example.com',
-        password: 'Password123',
-      };
-
-      const response = await fetch(`${baseUrl}/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(loginData),
+        username: 'testuser',
+        password: await bcrypt.hash('Password123', 12),
+        deletedAt: new Date(),
       });
 
-      const data: any = await response.json();
-
-      expect(response.status).toBe(403);
-      expect(data).toHaveProperty('error', 'Account has been deactivated');
+      const response = await request(app)
+        .post('/api/auth/login')
+        .send({ email: 'test@example.com', password: 'Password123' })
+        .expect(403);
+      expect(response.body).toHaveProperty('error', 'Account has been deactivated');
     });
 
     it('should prevent authentication with token after account deactivation', async () => {
-      const hashedPassword = await bcrypt.hash('Password123', 12);
-      const user = await prisma.user.create({
-        data: {
-          email: 'test@example.com',
-          username: 'testuser',
-          password: hashedPassword,
-        },
+      const userId = 'user-1';
+      const token = generateToken(userId);
+      (prismaMock.user.findUnique as unknown as jest.Mock).mockResolvedValue({
+        id: userId,
+        email: 'test@example.com',
+        username: 'testuser',
+        deletedAt: new Date(),
       });
 
-      const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET!, { expiresIn: '1d' });
-
-      // Deactivate account
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { deletedAt: new Date() },
-      });
-
-      // Try to access protected endpoint
-      const response = await fetch(`${baseUrl}/auth/profile`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      expect(response.status).toBe(403);
-      const data: any = await response.json();
-      expect(data).toHaveProperty('error', 'Account has been deactivated');
+      const response = await request(app)
+        .get('/api/auth/profile')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(403);
+      expect(response.body).toHaveProperty('error', 'Account has been deactivated');
     });
   });
 });

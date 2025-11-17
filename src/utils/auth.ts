@@ -1,9 +1,7 @@
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { Request, Response, NextFunction } from 'express';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '../lib/prisma';
 
 export interface AuthRequest extends Request {
   user?: {
@@ -46,12 +44,6 @@ export const authenticateToken = async (
 
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId },
-      select: { 
-        id: true, 
-        email: true, 
-        username: true, 
-        deletedAt: true 
-      },
     });
 
     if (!user) {
@@ -59,13 +51,13 @@ export const authenticateToken = async (
       return;
     }
 
-    // Check if account is deactivated
-    if (user.deletedAt) {
+    const userAny = user as any;
+    if (userAny && userAny.deletedAt) {
       res.status(403).json({ error: 'Account has been deactivated' });
       return;
     }
 
-    req.user = user;
+    req.user = { id: user.id, email: user.email, username: user.username };
     next();
   } catch (error) {
     res.status(403).json({ error: 'Invalid or expired token' });
