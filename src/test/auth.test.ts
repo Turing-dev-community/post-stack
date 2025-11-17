@@ -522,6 +522,36 @@ describe('Authentication Routes', () => {
       expect(data.user.profilePicture).toBe('https://example.com/pic.jpg');
       expect(data.user.about).toBe('This about will be trimmed.');
     });
+
+    it('should sanitize script tags in about field', async () => {
+      const hashedPassword = await bcrypt.hash('Password123', 12);
+      const user = await prisma.user.create({
+        data: {
+          email: 'sanitizeprofile@example.com',
+          username: 'sanitizeprofile',
+          password: hashedPassword,
+        },
+      });
+
+      const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET!, { expiresIn: '1d' });
+
+      const updateData = {
+        about: 'Hello <script>alert(1)</script> World',
+      };
+
+      const response = await fetch(`${baseUrl}/auth/profile`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(updateData),
+      });
+
+      const data: any = await response.json();
+      expect(response.status).toBe(200);
+      expect(data.user.about).toBe('Hello World');
+    });
   });
 
   describe('DELETE /api/auth/account', () => {

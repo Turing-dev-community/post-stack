@@ -3,6 +3,15 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
+const sanitizeText = (value: any) => {
+  if (typeof value !== "string") return value;
+  return value
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+    .replace(/[<>]/g, "") 
+    .replace(/\s+/g, " ")
+    .trim();
+};
+
 export const validateSignup = [
   body("email")
     .trim()
@@ -11,6 +20,7 @@ export const validateSignup = [
     .withMessage("Please provide a valid email"),
   body("username")
     .trim()
+    .customSanitizer(sanitizeText)
     .isLength({ min: 3, max: 30 })
     .matches(/^[a-zA-Z0-9_]+$/)
     .withMessage(
@@ -36,9 +46,14 @@ export const validateLogin = [
 export const validatePost = [
   body("title")
     .trim()
+    .customSanitizer(sanitizeText)
     .isLength({ min: 1, max: 200 })
     .withMessage("Title must be between 1 and 200 characters"),
-  body("content").trim().isLength({ min: 1 }).withMessage("Content is required"),
+  body("content")
+    .trim()
+    .customSanitizer(sanitizeText)
+    .isLength({ min: 1 })
+    .withMessage("Content is required"),
   body("published")
     .optional()
     .isBoolean()
@@ -60,11 +75,13 @@ export const validatePost = [
   body("metaTitle")
     .optional()
     .trim()
+    .customSanitizer(sanitizeText)
     .isLength({ max: 60 })
     .withMessage("Meta title must be 60 characters or less"),
   body("metaDescription")
     .optional()
     .trim()
+    .customSanitizer(sanitizeText)
     .isLength({ max: 160 })
     .withMessage("Meta description must be 160 characters or less"),
   body("ogImage")
@@ -97,6 +114,7 @@ export const validatePost = [
 export const validateComment = [
   body("content")
     .trim()
+    .customSanitizer(sanitizeText)
     .isLength({ min: 1, max: 5000 })
     .withMessage("Comment content must be between 1 and 5000 characters"),
 ];
@@ -110,6 +128,7 @@ export const validateProfileUpdate = [
   body("about")
     .optional({ nullable: true })
     .trim()
+    .customSanitizer(sanitizeText)
     .isLength({ min: 10, max: 1000 })
     .withMessage("About must be between 10 and 1000 characters"),
 ];

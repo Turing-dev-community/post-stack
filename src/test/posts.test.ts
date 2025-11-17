@@ -1125,6 +1125,32 @@ describe('Blog Post Routes', () => {
       expect(data.post.slug).toBe('trimmed-title');
     });
 
+    it('should sanitize script tags in title and meta fields', async () => {
+      const postData = {
+        title: '<script>alert(1)</script> Malicious Title',
+        content: '# Safe Content',
+        metaTitle: 'Meta <script>alert(2)</script> Title',
+        metaDescription: 'Desc <script>alert(3)</script> ription',
+        published: true,
+      };
+
+      const response = await fetch(`${baseUrl}/posts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`,
+        },
+        body: JSON.stringify(postData),
+      });
+
+      const data: any = await response.json();
+      expect(response.status).toBe(201);
+      expect(data.post.title).toBe('Malicious Title');
+      expect(data.post.metaTitle).toBe('Meta Title');
+      expect(data.post.metaDescription).toBe('Desc ription');
+      expect(data.post.slug).toContain('malicious-title');
+    });
+
     it('should reject title with only whitespace', async () => {
       const postData = {
         title: '    ',
@@ -2919,6 +2945,33 @@ describe('Blog Post Routes', () => {
       const data: any = await response.json();
       expect(response.status).toBe(201);
       expect(data.comment.content).toBe('This comment should be trimmed.');
+    });
+
+    it('should sanitize script tags in comment content', async () => {
+      const post = await prisma.post.create({
+        data: {
+          title: 'Script Comment Post',
+          content: '# Test Content',
+          slug: 'script-comment-post',
+          published: true,
+          authorId: userId,
+        },
+      });
+
+      const response = await fetch(`${baseUrl}/posts/${post.id}/comments`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({
+          content: 'Nice post <script>alert(999)</script> indeed',
+        }),
+      });
+
+      const data: any = await response.json();
+      expect(response.status).toBe(201);
+      expect(data.comment.content).toBe('Nice post indeed');
     });
   });
 
