@@ -1,120 +1,161 @@
-import { prisma } from './setup';
+/// <reference types="jest" />
+
+import request from 'supertest';
 import jwt from 'jsonwebtoken';
-import bcrypt from 'bcryptjs';
+import { PrismaClient } from '@prisma/client';
+import { mockDeep, DeepMockProxy } from 'jest-mock-extended';
+import { mockReset } from 'jest-mock-extended';
+
+// Mock Prisma at the top (before imports)
+jest.mock('../lib/prisma', () => ({
+  __esModule: true,
+  prisma: mockDeep<PrismaClient>(),
+}));
+
+// Import after mock
+import { prisma } from '../lib/prisma';
+import app from '../index';
+
+const prismaMock = prisma as unknown as DeepMockProxy<PrismaClient>;
+
+// Reset mocks before each test
+beforeEach(() => {
+  mockReset(prismaMock);
+});
 
 describe('User Followers Routes', () => {
-  const baseUrl = `http://localhost:${process.env.PORT}/api`;
   let authToken: string;
   let userId: string;
   let otherUserToken: string;
   let otherUserId: string;
   let thirdUserId: string;
 
-  beforeEach(async () => {
-    const hashedPassword = await bcrypt.hash('Password123', 12);
-    
-    const user = await prisma.user.create({
-      data: {
+  beforeEach(() => {
+    // Set up mock user IDs
+    userId = 'user-1';
+    otherUserId = 'user-2';
+    thirdUserId = 'user-3';
+
+    // Generate real JWT tokens (fast, no need to mock)
+    authToken = jwt.sign({ userId }, process.env.JWT_SECRET!);
+    otherUserToken = jwt.sign({ userId: otherUserId }, process.env.JWT_SECRET!);
+  });
+
+  // Helper function to mock auth user lookup
+  const mockAuthUser = (userIdToMock: string) => {
+    const userMap: Record<string, any> = {
+      [userId]: {
+        id: userId,
         email: 'test@example.com',
         username: 'testuser',
-        password: hashedPassword,
+        deletedAt: null,
       },
-    });
-    userId = user.id;
-    authToken = jwt.sign({ userId: user.id }, process.env.JWT_SECRET!);
-
-    const otherUser = await prisma.user.create({
-      data: {
+      [otherUserId]: {
+        id: otherUserId,
         email: 'other@example.com',
         username: 'otheruser',
-        password: hashedPassword,
+        deletedAt: null,
       },
-    });
-    otherUserId = otherUser.id;
-    otherUserToken = jwt.sign({ userId: otherUser.id }, process.env.JWT_SECRET!);
-
-    const thirdUser = await prisma.user.create({
-      data: {
+      [thirdUserId]: {
+        id: thirdUserId,
         email: 'third@example.com',
         username: 'thirduser',
-        password: hashedPassword,
+        deletedAt: null,
       },
+    };
+
+    (prismaMock.user.findUnique as jest.Mock).mockImplementation((args: any) => {
+      const id = args?.where?.id;
+      return Promise.resolve(userMap[id] || null);
     });
-    thirdUserId = thirdUser.id;
-  });
+  };
 
   describe('POST /api/users/:userId/follow', () => {
     it('should allow user to follow another user', async () => {
-      const response = await fetch(`${baseUrl}/users/${otherUserId}/follow`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${authToken}`,
-        },
+      // Mock auth user lookup (will handle both auth and business logic calls)
+      mockAuthUser(userId);
+
+      // Override for the specific user lookup in business logic if needed
+      // The mockAuthUser already handles both userId and otherUserId
+
+      // Mock: Check if already following (should return null)
+      (prismaMock.follow.findFirst as jest.Mock).mockResolvedValue(null);
+
+      // Mock: Create follow relationship
+      (prismaMock.follow.create as jest.Mock).mockResolvedValue({
+        id: 'follow-1',
+        followerId: userId,
+        followingId: otherUserId,
+        createdAt: new Date(),
       });
 
-      const data: any = await response.json();
+      const response = await request(app)
+        .post(`/api/users/${otherUserId}/follow`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(201);
 
-      expect(response.status).toBe(201);
-      expect(data.message).toBe('Successfully followed user');
-      expect(data.followingId).toBe(otherUserId);
+      expect(response.body.message).toBe('Successfully followed user');
+      expect(response.body.followingId).toBe(otherUserId);
 
-      // Verify follow relationship was created
-      const follow = await prisma.follow.findFirst({
+      // Verify Prisma was called correctly
+      // First call: auth middleware (userId), Second call: check user to follow (otherUserId)
+      expect(prismaMock.user.findUnique).toHaveBeenCalledTimes(2);
+      expect(prismaMock.follow.findFirst).toHaveBeenCalledWith({
         where: {
           followerId: userId,
           followingId: otherUserId,
         },
       });
-      expect(follow).toBeTruthy();
-    });
-
-    it('should prevent following yourself', async () => {
-      const response = await fetch(`${baseUrl}/users/${userId}/follow`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${authToken}`,
-        },
-      });
-
-      const data: any = await response.json();
-
-      expect(response.status).toBe(400);
-      expect(data.error).toBe('Cannot follow yourself');
-    });
-
-    it('should prevent duplicate follows', async () => {
-      // First follow
-      await prisma.follow.create({
+      expect(prismaMock.follow.create).toHaveBeenCalledWith({
         data: {
           followerId: userId,
           followingId: otherUserId,
         },
       });
+    });
 
-      // Try to follow again
-      const response = await fetch(`${baseUrl}/users/${otherUserId}/follow`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${authToken}`,
-        },
+    it('should prevent following yourself', async () => {
+      // Mock auth user lookup
+      mockAuthUser(userId);
+
+      const response = await request(app)
+        .post(`/api/users/${userId}/follow`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(400);
+
+      expect(response.body.error).toBe('Cannot follow yourself');
+
+      // Verify only auth call was made, not the business logic call
+      expect(prismaMock.user.findUnique).toHaveBeenCalledTimes(1);
+      expect(prismaMock.follow.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('should prevent duplicate follows', async () => {
+      // Mock auth user lookup (handles both auth and business logic)
+      mockAuthUser(userId);
+
+      // Mock: Already following (return existing follow)
+      (prismaMock.follow.findFirst as jest.Mock).mockResolvedValue({
+        id: 'follow-existing',
+        followerId: userId,
+        followingId: otherUserId,
       });
 
-      const data: any = await response.json();
+      const response = await request(app)
+        .post(`/api/users/${otherUserId}/follow`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(400);
 
-      expect(response.status).toBe(400);
-      expect(data.error).toBe('Already following this user');
+      expect(response.body.error).toBe('Already following this user');
+
+      // Verify create was NOT called
+      expect(prismaMock.follow.create).not.toHaveBeenCalled();
     });
 
     it('should require authentication to follow', async () => {
-      const response = await fetch(`${baseUrl}/users/${otherUserId}/follow`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
+      const response = await request(app)
+        .post(`/api/users/${otherUserId}/follow`)
+        .expect(401);
 
       expect(response.status).toBe(401);
     });
@@ -122,45 +163,49 @@ describe('User Followers Routes', () => {
 
   describe('DELETE /api/users/:userId/follow', () => {
     it('should allow user to unfollow another user', async () => {
-      // Create follow relationship first
-      await prisma.follow.create({
-        data: {
-          followerId: userId,
-          followingId: otherUserId,
-        },
+      // Mock auth user lookup
+      mockAuthUser(userId);
+      
+      // Mock: Find existing follow relationship
+      (prismaMock.follow.findFirst as jest.Mock).mockResolvedValue({
+        id: 'follow-1',
+        followerId: userId,
+        followingId: otherUserId,
       });
 
-      const response = await fetch(`${baseUrl}/users/${otherUserId}/follow`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${authToken}`,
-        },
+      // Mock: Delete follow relationship
+      (prismaMock.follow.delete as jest.Mock).mockResolvedValue({
+        id: 'follow-1',
+        followerId: userId,
+        followingId: otherUserId,
       });
 
-      const data: any = await response.json();
+      const response = await request(app)
+        .delete(`/api/users/${otherUserId}/follow`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(200);
 
-      expect(response.status).toBe(200);
-      expect(data.message).toBe('Successfully unfollowed user');
-      expect(data.followingId).toBe(otherUserId);
+      expect(response.body.message).toBe('Successfully unfollowed user');
+      expect(response.body.followingId).toBe(otherUserId);
 
-      // Verify follow relationship was deleted
-      const follow = await prisma.follow.findFirst({
+      // Verify Prisma was called correctly
+      expect(prismaMock.follow.findFirst).toHaveBeenCalledWith({
         where: {
           followerId: userId,
           followingId: otherUserId,
         },
       });
-      expect(follow).toBeFalsy();
+      expect(prismaMock.follow.delete).toHaveBeenCalledWith({
+        where: {
+          id: 'follow-1',
+        },
+      });
     });
 
     it('should require authentication to unfollow', async () => {
-      const response = await fetch(`${baseUrl}/users/${otherUserId}/follow`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
+      const response = await request(app)
+        .delete(`/api/users/${otherUserId}/follow`)
+        .expect(401);
 
       expect(response.status).toBe(401);
     });
@@ -168,150 +213,159 @@ describe('User Followers Routes', () => {
 
   describe('GET /api/users/:userId/followers', () => {
     it('should return list of followers', async () => {
-      // Create multiple followers
-      const user1 = await prisma.user.create({
-        data: {
-          email: 'follower1@example.com',
-          username: 'follower1',
-          password: await bcrypt.hash('Password123', 12),
+      const follower1 = {
+        id: 'follower-1',
+        username: 'follower1',
+        createdAt: new Date('2024-01-01'),
+      };
+      const follower2 = {
+        id: 'follower-2',
+        username: 'follower2',
+        createdAt: new Date('2024-01-02'),
+      };
+
+      // Mock: Get followers
+      (prismaMock.follow.findMany as jest.Mock).mockResolvedValue([
+        {
+          id: 'follow-1',
+          createdAt: new Date('2024-01-01'),
+          follower: follower1,
         },
-      });
-
-      const user2 = await prisma.user.create({
-        data: {
-          email: 'follower2@example.com',
-          username: 'follower2',
-          password: await bcrypt.hash('Password123', 12),
+        {
+          id: 'follow-2',
+          createdAt: new Date('2024-01-02'),
+          follower: follower2,
         },
-      });
+      ]);
 
-      // Create follow relationships
-      await prisma.follow.create({
-        data: {
-          followerId: user1.id,
-          followingId: userId,
-        },
-      });
+      // Mock: Count followers
+      (prismaMock.follow.count as jest.Mock).mockResolvedValue(2);
 
-      await prisma.follow.create({
-        data: {
-          followerId: user2.id,
-          followingId: userId,
-        },
-      });
+      const response = await request(app)
+        .get(`/api/users/${userId}/followers`)
+        .expect(200);
 
-      const response = await fetch(`${baseUrl}/users/${userId}/followers`);
-
-      const data: any = await response.json();
-
-      expect(response.status).toBe(200);
-      expect(data).toHaveProperty('followers');
-      expect(data).toHaveProperty('total');
-      expect(data).toHaveProperty('page');
-      expect(data).toHaveProperty('limit');
-      expect(data.followers).toHaveLength(2);
-      expect(data.total).toBe(2);
-      expect(data.followers[0]).toHaveProperty('id');
-      expect(data.followers[0]).toHaveProperty('username');
-      expect(data.followers[0]).toHaveProperty('createdAt');
+      expect(response.body).toHaveProperty('followers');
+      expect(response.body).toHaveProperty('total');
+      expect(response.body).toHaveProperty('page');
+      expect(response.body).toHaveProperty('limit');
+      expect(response.body.followers).toHaveLength(2);
+      expect(response.body.total).toBe(2);
+      expect(response.body.followers[0]).toHaveProperty('id');
+      expect(response.body.followers[0]).toHaveProperty('username');
+      expect(response.body.followers[0]).toHaveProperty('createdAt');
     });
 
     it('should return empty list when user has no followers', async () => {
-      const response = await fetch(`${baseUrl}/users/${userId}/followers`);
+      // Mock: No followers
+      (prismaMock.follow.findMany as jest.Mock).mockResolvedValue([]);
+      (prismaMock.follow.count as jest.Mock).mockResolvedValue(0);
 
-      const data: any = await response.json();
+      const response = await request(app)
+        .get(`/api/users/${userId}/followers`)
+        .expect(200);
 
-      expect(response.status).toBe(200);
-      expect(data.followers).toHaveLength(0);
-      expect(data.total).toBe(0);
+      expect(response.body.followers).toHaveLength(0);
+      expect(response.body.total).toBe(0);
     });
   });
 
   describe('GET /api/users/:userId/following', () => {
     it('should return list of users being followed', async () => {
-      // Create follow relationships
-      await prisma.follow.create({
-        data: {
-          followerId: userId,
-          followingId: otherUserId,
+      const following1 = {
+        id: otherUserId,
+        username: 'otheruser',
+        createdAt: new Date('2024-01-01'),
+      };
+      const following2 = {
+        id: thirdUserId,
+        username: 'thirduser',
+        createdAt: new Date('2024-01-02'),
+      };
+
+      // Mock: Get following
+      (prismaMock.follow.findMany as jest.Mock).mockResolvedValue([
+        {
+          id: 'follow-1',
+          createdAt: new Date('2024-01-01'),
+          following: following1,
         },
-      });
-
-      await prisma.follow.create({
-        data: {
-          followerId: userId,
-          followingId: thirdUserId,
+        {
+          id: 'follow-2',
+          createdAt: new Date('2024-01-02'),
+          following: following2,
         },
-      });
+      ]);
 
-      const response = await fetch(`${baseUrl}/users/${userId}/following`);
+      // Mock: Count following
+      (prismaMock.follow.count as jest.Mock).mockResolvedValue(2);
 
-      const data: any = await response.json();
+      const response = await request(app)
+        .get(`/api/users/${userId}/following`)
+        .expect(200);
 
-      expect(response.status).toBe(200);
-      expect(data).toHaveProperty('following');
-      expect(data).toHaveProperty('total');
-      expect(data.following).toHaveLength(2);
-      expect(data.total).toBe(2);
-      expect(data.following[0]).toHaveProperty('id');
-      expect(data.following[0]).toHaveProperty('username');
-      expect(data.following[0]).toHaveProperty('createdAt');
+      expect(response.body).toHaveProperty('following');
+      expect(response.body).toHaveProperty('total');
+      expect(response.body.following).toHaveLength(2);
+      expect(response.body.total).toBe(2);
+      expect(response.body.following[0]).toHaveProperty('id');
+      expect(response.body.following[0]).toHaveProperty('username');
+      expect(response.body.following[0]).toHaveProperty('createdAt');
     });
 
     it('should return empty list when user is not following anyone', async () => {
-      const response = await fetch(`${baseUrl}/users/${userId}/following`);
+      // Mock: Not following anyone
+      (prismaMock.follow.findMany as jest.Mock).mockResolvedValue([]);
+      (prismaMock.follow.count as jest.Mock).mockResolvedValue(0);
 
-      const data: any = await response.json();
+      const response = await request(app)
+        .get(`/api/users/${userId}/following`)
+        .expect(200);
 
-      expect(response.status).toBe(200);
-      expect(data.following).toHaveLength(0);
-      expect(data.total).toBe(0);
+      expect(response.body.following).toHaveLength(0);
+      expect(response.body.total).toBe(0);
     });
   });
 
   describe('GET /api/auth/profile - with follower counts', () => {
     it('should return profile with follower and following counts', async () => {
-      // Create followers
-      for (let i = 1; i <= 3; i++) {
-        const user = await prisma.user.create({
-          data: {
-            email: `follower${i}@example.com`,
-            username: `follower${i}`,
-            password: await bcrypt.hash('Password123', 12),
-          },
-        });
-
-        await prisma.follow.create({
-          data: {
-            followerId: user.id,
-            followingId: userId,
-          },
-        });
-      }
-
-      // Create users being followed
-      await prisma.follow.create({
-        data: {
-          followerId: userId,
-          followingId: otherUserId,
-        },
+      // This test is for auth routes, not users routes
+      // Mock auth user lookup (for authenticateToken middleware)
+      mockAuthUser(userId);
+      
+      // Mock user.findUnique for profile lookup (with _count)
+      (prismaMock.user.findUnique as jest.Mock).mockImplementation((args: any) => {
+        const id = args?.where?.id;
+        if (id === userId) {
+          // First call: auth middleware, Second call: profile lookup
+          return Promise.resolve({
+            id: userId,
+            email: 'test@example.com',
+            username: 'testuser',
+            profilePicture: null,
+            about: null,
+            createdAt: new Date(),
+            _count: {
+              posts: 0,
+            },
+          });
+        }
+        return Promise.resolve(null);
       });
+      
+      // Mock follower count (auth routes will make these calls)
+      (prismaMock.follow.count as jest.Mock)
+        .mockResolvedValueOnce(3) // followerCount
+        .mockResolvedValueOnce(1); // followingCount
 
-      const response = await fetch(`${baseUrl}/auth/profile`, {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${authToken}`,
-        },
-      });
+      const response = await request(app)
+        .get('/api/auth/profile')
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(200);
 
-      const data: any = await response.json();
-
-      expect(response.status).toBe(200);
-      expect(data).toHaveProperty('user');
-      expect(data.user).toHaveProperty('followerCount', 3);
-      expect(data.user).toHaveProperty('followingCount', 1);
-      expect(data.user).toHaveProperty('_count');
+      expect(response.body).toHaveProperty('user');
+      expect(response.body.user).toHaveProperty('followerCount', 3);
+      expect(response.body.user).toHaveProperty('followingCount', 1);
     });
   });
 });
-

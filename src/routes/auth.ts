@@ -1,12 +1,11 @@
 import { Router, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
 import { generateToken, hashPassword, comparePassword, authenticateToken } from '../utils/auth';
 import { validateSignup, validateLogin, validateProfileUpdate } from '../middleware/validators';
 import { handleValidationErrors, asyncHandler } from '../middleware/validation';
 import { AuthRequest } from '../utils/auth';
+import { prisma } from '../lib/prisma';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 // Signup endpoint
 router.post('/signup', validateSignup, handleValidationErrors, asyncHandler(async (req: AuthRequest, res: Response) => {
