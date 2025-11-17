@@ -1,22 +1,17 @@
 import { body, query } from "express-validator";
 import { PrismaClient } from "@prisma/client";
+import sanitizeHtml from 'sanitize-html';
 
 const prisma = new PrismaClient();
 
 const sanitizeText = (value: any) => {
   if (typeof value !== "string") return value;
-  let sanitized = value;
-  let previous;
-  const scriptBlock = /<\s*script\b[^>]*>([\s\S]*?)<\s*\/\s*script\s*>/gi;
-  do {
-    previous = sanitized;
-    sanitized = sanitized.replace(scriptBlock, "");
-  } while (sanitized !== previous);
+    let sanitized = sanitizeHtml(value, {
+    allowedTags: [],
+    allowedAttributes: {}
+  });
 
-  return sanitized
-    .replace(/[<>]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
+  return sanitized.replace(/\s+/g, " ").trim();
 };
 
 export const validateSignup = [
