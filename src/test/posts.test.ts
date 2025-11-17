@@ -1372,6 +1372,33 @@ describe('Blog Post Routes', () => {
       expect(data.post.ogImage).toBe(postData.ogImage);
     });
 
+    it('should trim SEO fields and ogImage URL', async () => {
+      const postData = {
+        title: 'SEO Trim Test',
+        content: '# SEO Trim Content',
+        metaTitle: '   Custom SEO Title   ',
+        metaDescription: '   This is a custom meta description   ',
+        ogImage: '   https://example.com/image.jpg   ',
+      };
+
+      const response = await fetch(`${baseUrl}/posts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`,
+        },
+        body: JSON.stringify(postData),
+      });
+
+      const data: any = await response.json();
+      expect(response.status).toBe(201);
+      expect(data.post.metaTitle).toBe('Custom SEO Title');
+      expect(data.post.metaDescription).toBe('This is a custom meta description');
+      expect(data.post.ogImage).toBe('https://example.com/image.jpg');
+    });
+
+    // Note: No trimming for categoryId or tag IDs; tests adjusted accordingly
+
     it('should create a post with featured status', async () => {
       const postData = {
         title: 'Featured Test Post',
@@ -2865,6 +2892,33 @@ describe('Blog Post Routes', () => {
 
       expect(response.status).toBe(401);
       expect(data).toHaveProperty('error', 'Access token required');
+    });
+
+    it('should trim comment content', async () => {
+      const post = await prisma.post.create({
+        data: {
+          title: 'Trim Comment Post',
+          content: '# Test Content',
+          slug: 'trim-comment-post',
+          published: true,
+          authorId: userId,
+        },
+      });
+
+      const response = await fetch(`${baseUrl}/posts/${post.id}/comments`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({
+          content: '   This comment should be trimmed.   ',
+        }),
+      });
+
+      const data: any = await response.json();
+      expect(response.status).toBe(201);
+      expect(data.comment.content).toBe('This comment should be trimmed.');
     });
   });
 

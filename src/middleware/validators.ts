@@ -5,10 +5,12 @@ const prisma = new PrismaClient();
 
 export const validateSignup = [
   body("email")
+    .trim()
     .isEmail()
     .normalizeEmail()
     .withMessage("Please provide a valid email"),
   body("username")
+    .trim()
     .isLength({ min: 3, max: 30 })
     .matches(/^[a-zA-Z0-9_]+$/)
     .withMessage(
@@ -24,6 +26,7 @@ export const validateSignup = [
 
 export const validateLogin = [
   body("email")
+    .trim()
     .isEmail()
     .normalizeEmail()
     .withMessage("Please provide a valid email"),
@@ -56,14 +59,17 @@ export const validatePost = [
     }),
   body("metaTitle")
     .optional()
+    .trim()
     .isLength({ max: 60 })
     .withMessage("Meta title must be 60 characters or less"),
   body("metaDescription")
     .optional()
+    .trim()
     .isLength({ max: 160 })
     .withMessage("Meta description must be 160 characters or less"),
   body("ogImage")
     .optional({ nullable: true })
+    .trim()
     .isURL()
     .withMessage("OG image must be a valid URL"),
   body("tags")
@@ -90,6 +96,7 @@ export const validatePost = [
 
 export const validateComment = [
   body("content")
+    .trim()
     .isLength({ min: 1, max: 5000 })
     .withMessage("Comment content must be between 1 and 5000 characters"),
 ];
@@ -97,10 +104,12 @@ export const validateComment = [
 export const validateProfileUpdate = [
   body("profilePicture")
     .optional({ nullable: true })
+    .trim()
     .isURL()
     .withMessage("Profile picture must be a valid URL"),
   body("about")
     .optional({ nullable: true })
+    .trim()
     .isLength({ min: 10, max: 1000 })
     .withMessage("About must be between 10 and 1000 characters"),
 ];
