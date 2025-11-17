@@ -1423,8 +1423,6 @@ describe('Blog Post Routes', () => {
       expect(data.post.ogImage).toBe('https://example.com/image.jpg');
     });
 
-    // Note: No trimming for categoryId or tag IDs; tests adjusted accordingly
-
     it('should create a post with featured status', async () => {
       const postData = {
         title: 'Featured Test Post',
