@@ -12,13 +12,14 @@ const prisma = new PrismaClient();
 router.post('/signup', validateSignup, handleValidationErrors, asyncHandler(async (req: AuthRequest, res: Response) => {
   const { email, username, password } = req.body;
 
-  // Check if user already exists
+  // Check if user already exists (including deactivated accounts - emails/usernames cannot be reused)
   const existingUser = await prisma.user.findFirst({
     where: {
       OR: [
         { email },
         { username }
       ]
+      // Note: We check all users (including deactivated) to prevent email/username reuse
     }
   });
 
@@ -63,6 +64,14 @@ router.post('/login', validateLogin, handleValidationErrors, asyncHandler(async 
   if (!user) {
     return res.status(401).json({
       error: 'Invalid credentials',
+    });
+  }
+
+  // Check if account is deactivated
+  if (user.deletedAt) {
+    return res.status(403).json({
+      error: 'Account has been deactivated',
+      message: 'This account has been deactivated. Please contact support if you believe this is an error.',
     });
   }
 
@@ -180,6 +189,45 @@ router.put('/profile', authenticateToken, validateProfileUpdate, handleValidatio
       followerCount,
       followingCount,
     },
+  });
+}));
+
+// Deactivate account (soft delete)
+router.delete('/account', authenticateToken, asyncHandler(async (req: AuthRequest, res: Response) => {
+  if (!req.user) {
+    return res.status(401).json({
+      error: 'Authentication required',
+    });
+  }
+
+  // Check if account is already deactivated
+  const user = await prisma.user.findUnique({
+    where: { id: req.user.id },
+    select: { id: true, deletedAt: true },
+  });
+
+  if (!user) {
+    return res.status(404).json({
+      error: 'User not found',
+    });
+  }
+
+  if (user.deletedAt) {
+    return res.status(400).json({
+      error: 'Account already deactivated',
+      message: 'This account has already been deactivated.',
+    });
+  }
+
+  // Soft delete: set deletedAt timestamp
+  await prisma.user.update({
+    where: { id: req.user.id },
+    data: { deletedAt: new Date() },
+  });
+
+  return res.json({
+    message: 'Account deactivated successfully',
+    note: 'Your account has been deactivated. You will not be able to log in or access your account.',
   });
 }));
 
