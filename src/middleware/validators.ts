@@ -5,8 +5,13 @@ const prisma = new PrismaClient();
 
 const sanitizeText = (value: any) => {
   if (typeof value !== "string") return value;
-  return value
-    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+    let sanitized = value;
+    let previous;
+    do {
+      previous = sanitized;
+      sanitized = sanitized.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "");
+    } while (sanitized !== previous);
+    return sanitized
     .replace(/[<>]/g, "") 
     .replace(/\s+/g, " ")
     .trim();
