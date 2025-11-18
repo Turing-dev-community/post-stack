@@ -16,9 +16,9 @@ describe('Tags API', () => {
     it('should return all tags', async () => {
 
       const mockTags = [
-        { id: 'tag-1', name: 'technology' },
-        { id: 'tag-2', name: 'tutorial' },
-        { id: 'tag-3', name: 'programming' },
+        { id: 'tag-1', name: 'technology', _count: { posts: 5 } },
+        { id: 'tag-2', name: 'tutorial', _count: { posts: 3 } },
+        { id: 'tag-3', name: 'programming', _count: { posts: 8 } },
       ];
 
       (prismaMock.tag.findMany as jest.Mock).mockResolvedValue(mockTags);
@@ -31,7 +31,10 @@ describe('Tags API', () => {
       expect(response.body).toHaveProperty('tags');
       expect(Array.isArray(response.body.tags)).toBe(true);
       expect(response.body.tags.length).toBe(3);
-      expect(response.body.tags).toEqual(mockTags);
+      // Tags should be sorted alphabetically by default
+      expect(response.body.tags[0].name).toBe('programming');
+      expect(response.body.tags[1].name).toBe('technology');
+      expect(response.body.tags[2].name).toBe('tutorial');
     });
   });
 
@@ -39,7 +42,7 @@ describe('Tags API', () => {
     it('should return tags matching search keyword', async () => {
       // Mock tags matching "tech" search
       const mockTags = [
-        { id: 'tag-1', name: 'technology' },
+        { id: 'tag-1', name: 'technology', _count: { posts: 5 } },
       ];
 
       // Mock Prisma call with search query
@@ -61,7 +64,7 @@ describe('Tags API', () => {
     it('should be case insensitive', async () => {
       // Mock tags matching "TECH" search (case insensitive)
       const mockTags = [
-        { id: 'tag-1', name: 'technology' },
+        { id: 'tag-1', name: 'technology', _count: { posts: 5 } },
       ];
 
       (prismaMock.tag.findMany as jest.Mock).mockResolvedValue(mockTags);
@@ -79,9 +82,9 @@ describe('Tags API', () => {
     it('should return all tags when search is empty', async () => {
       // Mock all tags for empty search
       const mockAllTags = [
-        { id: 'tag-1', name: 'technology' },
-        { id: 'tag-2', name: 'tutorial' },
-        { id: 'tag-3', name: 'programming' },
+        { id: 'tag-1', name: 'technology', _count: { posts: 5 } },
+        { id: 'tag-2', name: 'tutorial', _count: { posts: 3 } },
+        { id: 'tag-3', name: 'programming', _count: { posts: 8 } },
       ];
 
       // First call: all tags (no search)
@@ -100,6 +103,181 @@ describe('Tags API', () => {
         .expect(200);
 
       expect(responseEmpty.body.tags.length).toBe(responseAll.body.tags.length);
+    });
+  });
+
+  describe('GET /api/tags?popular=true', () => {
+    it('should return tags sorted by post count (most used first)', async () => {
+      // Mock tags with post counts
+      const mockTagsWithCount = [
+        {
+          id: 'tag-1',
+          name: 'technology',
+          _count: { posts: 15 },
+        },
+        {
+          id: 'tag-2',
+          name: 'tutorial',
+          _count: { posts: 8 },
+        },
+        {
+          id: 'tag-3',
+          name: 'programming',
+          _count: { posts: 20 },
+        },
+      ];
+
+      (prismaMock.tag.findMany as jest.Mock).mockResolvedValue(mockTagsWithCount);
+
+      const response = await request(app)
+        .get('/api/tags')
+        .query({ popular: 'true' })
+        .expect(200);
+
+      expect(response.body).toHaveProperty('tags');
+      expect(Array.isArray(response.body.tags)).toBe(true);
+      expect(response.body.tags.length).toBe(3);
+
+      // Verify tags are sorted by postCount descending
+      expect(response.body.tags[0].postCount).toBe(20); // programming (most used)
+      expect(response.body.tags[1].postCount).toBe(15); // technology
+      expect(response.body.tags[2].postCount).toBe(8); // tutorial (least used)
+
+      // Verify postCount is included in response
+      expect(response.body.tags[0]).toHaveProperty('postCount');
+      expect(response.body.tags[1]).toHaveProperty('postCount');
+      expect(response.body.tags[2]).toHaveProperty('postCount');
+    });
+
+    it('should sort tags alphabetically when popular is not true', async () => {
+      // Mock tags with post counts
+      const mockTagsWithCount = [
+        {
+          id: 'tag-1',
+          name: 'technology',
+          _count: { posts: 15 },
+        },
+        {
+          id: 'tag-2',
+          name: 'tutorial',
+          _count: { posts: 8 },
+        },
+        {
+          id: 'tag-3',
+          name: 'programming',
+          _count: { posts: 20 },
+        },
+      ];
+
+      (prismaMock.tag.findMany as jest.Mock).mockResolvedValue(mockTagsWithCount);
+
+      const response = await request(app)
+        .get('/api/tags')
+        .expect(200);
+
+      expect(response.body).toHaveProperty('tags');
+      expect(Array.isArray(response.body.tags)).toBe(true);
+      expect(response.body.tags.length).toBe(3);
+
+      // Verify tags are sorted alphabetically by name
+      expect(response.body.tags[0].name).toBe('programming');
+      expect(response.body.tags[1].name).toBe('technology');
+      expect(response.body.tags[2].name).toBe('tutorial');
+    });
+
+    it('should sort tags with same post count alphabetically when popular=true', async () => {
+      // Mock tags with same post counts
+      const mockTagsWithCount = [
+        {
+          id: 'tag-1',
+          name: 'technology',
+          _count: { posts: 10 },
+        },
+        {
+          id: 'tag-2',
+          name: 'tutorial',
+          _count: { posts: 10 },
+        },
+        {
+          id: 'tag-3',
+          name: 'programming',
+          _count: { posts: 10 },
+        },
+      ];
+
+      (prismaMock.tag.findMany as jest.Mock).mockResolvedValue(mockTagsWithCount);
+
+      const response = await request(app)
+        .get('/api/tags')
+        .query({ popular: 'true' })
+        .expect(200);
+
+      expect(response.body).toHaveProperty('tags');
+      expect(Array.isArray(response.body.tags)).toBe(true);
+      expect(response.body.tags.length).toBe(3);
+
+      // Verify tags with same count are sorted alphabetically
+      expect(response.body.tags[0].name).toBe('programming');
+      expect(response.body.tags[1].name).toBe('technology');
+      expect(response.body.tags[2].name).toBe('tutorial');
+    });
+
+    it('should work with search and popular parameters together', async () => {
+      // Mock tags matching "tech" search with post counts
+      const mockTagsWithCount = [
+        {
+          id: 'tag-1',
+          name: 'technology',
+          _count: { posts: 15 },
+        },
+        {
+          id: 'tag-4',
+          name: 'tech-tips',
+          _count: { posts: 5 },
+        },
+      ];
+
+      (prismaMock.tag.findMany as jest.Mock).mockResolvedValue(mockTagsWithCount);
+
+      const response = await request(app)
+        .get('/api/tags')
+        .query({ search: 'tech', popular: 'true' })
+        .expect(200);
+
+      expect(response.body).toHaveProperty('tags');
+      expect(Array.isArray(response.body.tags)).toBe(true);
+
+      // Verify tags are sorted by post count (most used first)
+      expect(response.body.tags[0].name).toBe('technology');
+      expect(response.body.tags[0].postCount).toBe(15);
+      expect(response.body.tags[1].name).toBe('tech-tips');
+      expect(response.body.tags[1].postCount).toBe(5);
+    });
+
+    it('should include postCount in response even when popular is false', async () => {
+      // Mock tags with post counts
+      const mockTagsWithCount = [
+        {
+          id: 'tag-1',
+          name: 'technology',
+          _count: { posts: 15 },
+        },
+        {
+          id: 'tag-2',
+          name: 'tutorial',
+          _count: { posts: 8 },
+        },
+      ];
+
+      (prismaMock.tag.findMany as jest.Mock).mockResolvedValue(mockTagsWithCount);
+
+      const response = await request(app)
+        .get('/api/tags')
+        .expect(200);
+
+      expect(response.body).toHaveProperty('tags');
+      expect(response.body.tags[0]).toHaveProperty('postCount');
+      expect(response.body.tags[1]).toHaveProperty('postCount');
     });
   });
 });
