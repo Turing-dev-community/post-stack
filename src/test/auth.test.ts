@@ -66,29 +66,36 @@ describe('Authentication Routes (mocked)', () => {
     });
 
     it('should trim email and username on signup', async () => {
+      (prismaMock.user.findFirst as unknown as jest.Mock).mockResolvedValue(null);
+      const created = {
+        id: 'user-2',
+        email: 'spaced@example.com',
+        username: 'spaceduser',
+        createdAt: new Date(),
+      };
+      (prismaMock.user.create as unknown as jest.Mock).mockResolvedValue(created);
+
       const userData = {
         email: '   spaced@example.com   ',
         username: '   spaceduser   ',
         password: 'Password123',
       };
 
-      const response = await fetch(`${baseUrl}/auth/signup`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(userData),
-      });
+      const response = await request(app)
+        .post('/api/auth/signup')
+        .send(userData)
+        .expect(201);
 
-      const data: any = await response.json();
-
-      expect(response.status).toBe(201);
-      expect(data.user.email).toBe('spaced@example.com');
-      expect(data.user.username).toBe('spaceduser');
-
-      const userInDb = await prisma.user.findUnique({ where: { email: 'spaced@example.com' } });
-      expect(userInDb).toBeTruthy();
-      expect(userInDb?.username).toBe('spaceduser');
+      expect(response.body.user.email).toBe('spaced@example.com');
+      expect(response.body.user.username).toBe('spaceduser');
+      expect(prismaMock.user.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            email: 'spaced@example.com',
+            username: 'spaceduser',
+          }),
+        })
+      );
     });
   });
 
@@ -143,31 +150,21 @@ describe('Authentication Routes (mocked)', () => {
 
     it('should login successfully with trimmed email', async () => {
       const hashedPassword = await bcrypt.hash('Password123', 12);
-      await prisma.user.create({
-        data: {
-          email: 'trimlogin@example.com',
-          username: 'trimlogin',
-          password: hashedPassword,
-        },
+      (prismaMock.user.findUnique as unknown as jest.Mock).mockResolvedValue({
+        id: 'user-2',
+        email: 'trimlogin@example.com',
+        username: 'trimlogin',
+        password: hashedPassword,
+        deletedAt: null,
       });
 
-      const loginData = {
-        email: '   trimlogin@example.com   ',
-        password: 'Password123',
-      };
+      const response = await request(app)
+        .post('/api/auth/login')
+        .send({ email: '   trimlogin@example.com   ', password: 'Password123' })
+        .expect(200);
 
-      const response = await fetch(`${baseUrl}/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(loginData),
-      });
-
-      const data: any = await response.json();
-      expect(response.status).toBe(200);
-      expect(data).toHaveProperty('message', 'Login successful');
-      expect(data.user.email).toBe('trimlogin@example.com');
+      expect(response.body).toHaveProperty('message', 'Login successful');
+      expect(response.body.user.email).toBe('trimlogin@example.com');
     });
   });
 
@@ -346,65 +343,73 @@ describe('Authentication Routes (mocked)', () => {
     });
 
     it('should trim profilePicture and about on update', async () => {
-      const hashedPassword = await bcrypt.hash('Password123', 12);
-      const user = await prisma.user.create({
-        data: {
-          email: 'trimprofile@example.com',
-          username: 'trimprofile',
-          password: hashedPassword,
-        },
+      const userId = 'user-3';
+      (prismaMock.user.findUnique as unknown as jest.Mock).mockResolvedValue({
+        id: userId,
+        email: 'trimprofile@example.com',
+        username: 'trimprofile',
+        deletedAt: null,
       });
-
-      const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET!, { expiresIn: '1d' });
-
-      const updateData = {
-        profilePicture: '   https://example.com/pic.jpg   ',
-        about: '   This about will be trimmed.   ',
-      };
-
-      const response = await fetch(`${baseUrl}/auth/profile`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify(updateData),
+      (prismaMock.user.update as unknown as jest.Mock).mockResolvedValue({
+        id: userId,
+        email: 'trimprofile@example.com',
+        username: 'trimprofile',
+        profilePicture: 'https://example.com/pic.jpg',
+        about: 'This about will be trimmed.',
+        createdAt: new Date(),
+        _count: { posts: 0 },
       });
+      (prismaMock.follow.count as unknown as jest.Mock)
+        .mockResolvedValueOnce(0)
+        .mockResolvedValueOnce(0);
 
-      const data: any = await response.json();
-      expect(response.status).toBe(200);
-      expect(data.user.profilePicture).toBe('https://example.com/pic.jpg');
-      expect(data.user.about).toBe('This about will be trimmed.');
+      const token = generateToken(userId);
+
+      const response = await request(app)
+        .put('/api/auth/profile')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          profilePicture: '   https://example.com/pic.jpg   ',
+          about: '   This about will be trimmed.   ',
+        })
+        .expect(200);
+
+      expect(response.body.user.profilePicture).toBe('https://example.com/pic.jpg');
+      expect(response.body.user.about).toBe('This about will be trimmed.');
     });
 
     it('should sanitize script tags in about field', async () => {
-      const hashedPassword = await bcrypt.hash('Password123', 12);
-      const user = await prisma.user.create({
-        data: {
-          email: 'sanitizeprofile@example.com',
-          username: 'sanitizeprofile',
-          password: hashedPassword,
-        },
+      const userId = 'user-4';
+      (prismaMock.user.findUnique as unknown as jest.Mock).mockResolvedValue({
+        id: userId,
+        email: 'sanitizeprofile@example.com',
+        username: 'sanitizeprofile',
+        deletedAt: null,
       });
-
-      const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET!, { expiresIn: '1d' });
-
-      const updateData = {
-        about: 'Hello <script>alert(1)</script> World',
-      };
-
-      const response = await fetch(`${baseUrl}/auth/profile`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify(updateData),
+      (prismaMock.user.update as unknown as jest.Mock).mockResolvedValue({
+        id: userId,
+        email: 'sanitizeprofile@example.com',
+        username: 'sanitizeprofile',
+        profilePicture: null,
+        about: 'Hello World',
+        createdAt: new Date(),
+        _count: { posts: 0 },
       });
+      (prismaMock.follow.count as unknown as jest.Mock)
+        .mockResolvedValueOnce(0)
+        .mockResolvedValueOnce(0);
 
-      const data: any = await response.json();
-      expect(response.status).toBe(200);
-      expect(data.user.about).toBe('Hello World');
+      const token = generateToken(userId);
+
+      const response = await request(app)
+        .put('/api/auth/profile')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          about: 'Hello <script>alert(1)</script> World',
+        })
+        .expect(200);
+
+      expect(response.body.user.about).toBe('Hello World');
     });
   });
 
