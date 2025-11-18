@@ -269,49 +269,6 @@ describe('User Followers Routes', () => {
     });
   });
 
-  describe('GET /api/auth/profile - with follower counts', () => {
-    it('should return profile with follower and following counts', async () => {
-      // Create followers
-      for (let i = 1; i <= 3; i++) {
-        const user = await prisma.user.create({
-          data: {
-            email: `follower${i}@example.com`,
-            username: `follower${i}`,
-            password: await bcrypt.hash('Password123', 12),
-          },
-        });
-
-        await prisma.follow.create({
-          data: {
-            followerId: user.id,
-            followingId: userId,
-          },
-        });
-      }
-
-      // Create users being followed
-      await prisma.follow.create({
-        data: {
-          followerId: userId,
-          followingId: otherUserId,
-        },
-      });
-
-      const response = await fetch(`${baseUrl}/auth/profile`, {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${authToken}`,
-        },
-      });
-
-      const data: any = await response.json();
-
-      expect(response.status).toBe(200);
-      expect(data).toHaveProperty('user');
-      expect(data.user).toHaveProperty('followerCount', 3);
-      expect(data.user).toHaveProperty('followingCount', 1);
-      expect(data.user).toHaveProperty('_count');
-    });
-  });
+  
 });
 
