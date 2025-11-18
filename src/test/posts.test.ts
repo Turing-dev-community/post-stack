@@ -1820,8 +1820,8 @@ describe('Blog Post Routes', () => {
       expect(response.status).toBe(200);
       expect(data).toHaveProperty('message', 'Post updated successfully');
       expect(data).toHaveProperty('post');
-      expect(data.post.metaTitle).toBeNull();
-      expect(data.post.metaDescription).toBeNull();
+      expect(data.post.metaTitle).toBe('');
+      expect(data.post.metaDescription).toBe('');
       expect(data.post.ogImage).toBeNull();
     });
 
