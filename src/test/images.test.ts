@@ -1,182 +1,172 @@
-import { prisma } from './setup';
-import jwt from 'jsonwebtoken';
-import bcrypt from 'bcryptjs';
-import fs from 'fs';
-import path from 'path';
+import request from "supertest";
+import { setupPrismaMock } from "./utils/mockPrisma";
+import jwt from "jsonwebtoken";
+import fs from "fs";
+import path from "path";
+// Import prisma and app AFTER mocks are set up
+import { prisma } from "../lib/prisma";
+import app from "../index";
 
+const { prisma: prismaMock, app: appInstance } = setupPrismaMock(prisma, app);
 
+describe("Image Routes", () => {
+	// Validate that mocking is properly set up
+	it("should have mocking properly configured", () => {
+		expect(prismaMock.isMocked).toBe(true);
+	});
 
-describe('Image Routes', () => {
-  const baseUrl = `http://localhost:${process.env.PORT}/api`;
-  let authToken: string;
-  let userId: string;
-  const uploadsDir = path.join(process.cwd(), 'uploads');
+	// Verify that the controller functions are exported
+	it("should export controller functions from imageController", () => {
+		const imageController = require("../controllers/imageController");
+		expect(imageController.upload).toBeDefined();
+		expect(imageController.get).toBeDefined();
+		expect(typeof imageController.upload).toBe("function");
+		expect(typeof imageController.get).toBe("function");
+	});
 
-  beforeEach(async () => {
+	let authToken: string;
+	let userId: string;
+	const uploadsDir = path.join(process.cwd(), "uploads");
 
-    const hashedPassword = await bcrypt.hash('Password123', 12);
-    const user = await prisma.user.create({
-      data: {
-        email: 'test@example.com',
-        username: 'testuser',
-        password: hashedPassword,
-      },
-    });
-    userId = user.id;
-    authToken = jwt.sign({ userId: user.id }, process.env.JWT_SECRET!);
-  });
+	const mockUser = {
+		id: "user-123",
+		email: "test@example.com",
+		username: "testuser",
+		password: "hashedPassword",
+		deletedAt: null,
+		createdAt: new Date(),
+		updatedAt: new Date(),
+	};
 
-  afterEach(async () => {
+	beforeEach(async () => {
+		// Mock user for authentication
+		(prismaMock.user.findUnique as jest.Mock).mockResolvedValue(mockUser);
 
-    if (fs.existsSync(uploadsDir)) {
-      const files = fs.readdirSync(uploadsDir);
-      files.forEach((file) => {
-        const filePath = path.join(uploadsDir, file);
-        if (fs.statSync(filePath).isFile()) {
-          fs.unlinkSync(filePath);
-        }
-      });
-    }
-  });
+		// Generate token
+		userId = mockUser.id;
+		authToken = jwt.sign({ userId: mockUser.id }, process.env.JWT_SECRET!);
+	});
 
-  describe('POST /api/images/upload', () => {
-    it('should upload an image successfully when authenticated', async () => {
+	afterEach(async () => {
+		// Clean up uploaded files
+		if (fs.existsSync(uploadsDir)) {
+			const files = fs.readdirSync(uploadsDir);
+			files.forEach((file) => {
+				const filePath = path.join(uploadsDir, file);
+				if (fs.statSync(filePath).isFile()) {
+					fs.unlinkSync(filePath);
+				}
+			});
+		}
+	});
 
-      const pngBuffer = Buffer.from(
-        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-        'base64'
-      );
+	describe("POST /api/images/upload", () => {
+		it("should upload an image successfully when authenticated", async () => {
+			const pngBuffer = Buffer.from(
+				"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+				"base64"
+			);
 
-      const formData = new FormData();
-      const blob = new Blob([pngBuffer], { type: 'image/png' });
-      formData.append('image', blob, 'test.png');
+			const response = await request(appInstance)
+				.post("/api/images/upload")
+				.set("Authorization", `Bearer ${authToken}`)
+				.attach("image", pngBuffer, "test.png")
+				.expect(201);
 
-      const response = await fetch(`${baseUrl}/images/upload`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${authToken}`,
-        },
-        body: formData,
-      });
+			expect(response.body).toHaveProperty(
+				"message",
+				"Image uploaded successfully"
+			);
+			expect(response.body).toHaveProperty("path");
+			expect(response.body).toHaveProperty("filename");
+			expect(response.body.path).toMatch(/^\/api\/images\/.+/);
+			expect(response.body.filename).toBeTruthy();
 
-      const data: any = await response.json();
+			// Verify file was created
+			const filePath = path.join(uploadsDir, response.body.filename);
+			expect(fs.existsSync(filePath)).toBe(true);
+		});
 
-      expect(response.status).toBe(201);
-      expect(data).toHaveProperty('message', 'Image uploaded successfully');
-      expect(data).toHaveProperty('path');
-      expect(data).toHaveProperty('filename');
-      expect(data.path).toMatch(/^\/api\/images\/.+/);
-      expect(data.filename).toBeTruthy();
+		it("should reject upload when not authenticated", async () => {
+			const pngBuffer = Buffer.from(
+				"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+				"base64"
+			);
 
+			const response = await request(appInstance)
+				.post("/api/images/upload")
+				.attach("image", pngBuffer, "test.png")
+				.expect(401);
 
-      const filePath = path.join(uploadsDir, data.filename);
-      expect(fs.existsSync(filePath)).toBe(true);
-    });
+			expect(response.body).toHaveProperty("error");
+		});
 
-    it('should reject upload when not authenticated', async () => {
-      const pngBuffer = Buffer.from(
-        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-        'base64'
-      );
+		it("should reject non-image files", async () => {
+			const textBuffer = Buffer.from("This is not an image", "utf-8");
 
-      const formData = new FormData();
-      const blob = new Blob([pngBuffer], { type: 'image/png' });
-      formData.append('image', blob, 'test.png');
+			const response = await request(appInstance)
+				.post("/api/images/upload")
+				.set("Authorization", `Bearer ${authToken}`)
+				.attach("image", textBuffer, "test.txt")
+				.expect(400);
 
-      const response = await fetch(`${baseUrl}/images/upload`, {
-        method: 'POST',
-        body: formData,
-      });
+			expect(response.body).toHaveProperty("error", "Invalid file type");
+			expect(response.body.message).toContain(
+				"Only JPEG, PNG, GIF, and WebP images"
+			);
+		});
 
-      expect(response.status).toBe(401);
-      const data: any = await response.json();
-      expect(data).toHaveProperty('error');
-    });
+		it("should reject upload when no file is provided", async () => {
+			const response = await request(appInstance)
+				.post("/api/images/upload")
+				.set("Authorization", `Bearer ${authToken}`)
+				.expect(400);
 
-    it('should reject non-image files', async () => {
-      const textBuffer = Buffer.from('This is not an image', 'utf-8');
+			expect(response.body).toHaveProperty("error", "No file uploaded");
+		});
+	});
 
-      const formData = new FormData();
-      const blob = new Blob([textBuffer], { type: 'text/plain' });
-      formData.append('image', blob, 'test.txt');
+	describe("GET /api/images/:filename", () => {
+		it("should fetch an uploaded image publicly without authentication", async () => {
+			// First upload an image
+			const pngBuffer = Buffer.from(
+				"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+				"base64"
+			);
 
-      const response = await fetch(`${baseUrl}/images/upload`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${authToken}`,
-        },
-        body: formData,
-      });
+			const uploadResponse = await request(appInstance)
+				.post("/api/images/upload")
+				.set("Authorization", `Bearer ${authToken}`)
+				.attach("image", pngBuffer, "test.png")
+				.expect(201);
 
-      expect(response.status).toBe(400);
-      const data: any = await response.json();
-      expect(data).toHaveProperty('error', 'Invalid file type');
-      expect(data.message).toContain('Only JPEG, PNG, GIF, and WebP images');
-    });
+			const filename = uploadResponse.body.filename;
 
-    it('should reject upload when no file is provided', async () => {
-      const response = await fetch(`${baseUrl}/images/upload`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${authToken}`,
-          'Content-Type': 'application/json',
-        },
-      });
+			// Then fetch it
+			const fetchResponse = await request(appInstance)
+				.get(`/api/images/${filename}`)
+				.buffer(true)
+				.expect(200);
 
-      expect(response.status).toBe(400);
-      const data: any = await response.json();
-      expect(data).toHaveProperty('error', 'No file uploaded');
-    });
-  });
+			expect(fetchResponse.headers["content-type"]).toContain("image/");
+			expect(Buffer.isBuffer(fetchResponse.body)).toBe(true);
+			expect(fetchResponse.body.length).toBeGreaterThan(0);
+		});
 
-  describe('GET /api/images/:filename', () => {
-    it('should fetch an uploaded image publicly without authentication', async () => {
+		it("should return 404 for non-existent image", async () => {
+			const response = await request(appInstance)
+				.get("/api/images/non-existent-image-12345.png")
+				.expect(404);
 
-      const pngBuffer = Buffer.from(
-        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-        'base64'
-      );
+			expect(response.body).toHaveProperty("error", "Image not found");
+		});
 
-      const formData = new FormData();
-      const blob = new Blob([pngBuffer], { type: 'image/png' });
-      formData.append('image', blob, 'test.png');
+		it("should prevent directory traversal attacks", async () => {
+			const response = await request(appInstance)
+				.get("/api/images/../../../../etc/passwd")
+				.expect(404);
 
-      const uploadResponse = await fetch(`${baseUrl}/images/upload`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${authToken}`,
-        },
-        body: formData,
-      });
-
-      const uploadData: any = await uploadResponse.json();
-      const filename = uploadData.filename;
-
-
-      const fetchResponse = await fetch(`${baseUrl}/images/${filename}`);
-
-      expect(fetchResponse.status).toBe(200);
-      expect(fetchResponse.headers.get('content-type')).toContain('image/');
-
-      const imageBuffer = await fetchResponse.arrayBuffer();
-      expect(imageBuffer.byteLength).toBeGreaterThan(0);
-    });
-
-    it('should return 404 for non-existent image', async () => {
-      const response = await fetch(`${baseUrl}/images/non-existent-image-12345.png`);
-
-      expect(response.status).toBe(404);
-      const data: any = await response.json();
-      expect(data).toHaveProperty('error', 'Image not found');
-    });
-
-    it('should prevent directory traversal attacks', async () => {
-      const response = await fetch(`${baseUrl}/images/../../../../etc/passwd`);
-
-      expect(response.status).toBe(404);
-      const data: any = await response.json();
-      expect(data).toHaveProperty('error', 'Route not found');
-    });
-  });
+			expect(response.body).toHaveProperty("error", "Route not found");
+		});
+	});
 });
-
