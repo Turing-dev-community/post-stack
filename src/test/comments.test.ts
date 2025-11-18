@@ -1,0 +1,241 @@
+import request from 'supertest';
+import { setupPrismaMock } from './utils/mockPrisma';
+import { prisma } from '../lib/prisma';
+import app from '../index';
+import { generateToken } from '../utils/auth';
+
+const { prisma: prismaMock } = setupPrismaMock(prisma, app);
+
+describe('Comments API (mocked)', () => {
+  const userId = 'user-1';
+  const authToken = (() => {
+    process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret';
+    return generateToken(userId);
+  })();
+
+  beforeEach(() => {
+    (prismaMock.user.findUnique as jest.Mock).mockResolvedValue({
+      id: userId,
+      email: 'user@example.com',
+      username: 'testuser',
+      deletedAt: null,
+    });
+  });
+
+  describe('POST /api/posts/:postId/comments', () => {
+    it('creates a comment when authenticated', async () => {
+      const postId = 'post-1';
+      (prismaMock.post.findUnique as jest.Mock).mockResolvedValue({ id: postId, slug: 'post-slug' });
+      (prismaMock.comment.create as jest.Mock).mockResolvedValue({
+        id: 'comment-1',
+        content: 'This is a test comment',
+        postId,
+        userId,
+        parentId: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        user: { id: userId, username: 'testuser' },
+      });
+
+      const res = await request(app)
+        .post(`/api/posts/${postId}/comments`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ content: 'This is a test comment' })
+        .expect(201);
+
+      expect(res.body).toHaveProperty('message', 'Comment created successfully');
+      expect(res.body.comment).toMatchObject({ content: 'This is a test comment', postId, userId });
+    });
+
+    it('returns 401 when not authenticated', async () => {
+      const postId = 'post-unauth';
+      const res = await request(app)
+        .post(`/api/posts/${postId}/comments`)
+        .send({ content: 'comment' })
+        .expect(401);
+      expect(res.body).toHaveProperty('error', 'Access token required');
+    });
+
+    it('trims and sanitizes content', async () => {
+      const postId = 'post-trim';
+      (prismaMock.post.findUnique as jest.Mock).mockResolvedValue({ id: postId, slug: 'post-trim-slug' });
+
+      (prismaMock.comment.create as jest.Mock).mockImplementation(async (args: any) => ({
+        id: 'comment-trim',
+        content: args.data.content,
+        postId,
+        userId,
+        parentId: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        user: { id: userId, username: 'testuser' },
+      }));
+
+      const res1 = await request(app)
+        .post(`/api/posts/${postId}/comments`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ content: '   This comment should be trimmed.   ' })
+        .expect(201);
+      expect(res1.body.comment.content).toBe('This comment should be trimmed.');
+
+      const res2 = await request(app)
+        .post(`/api/posts/${postId}/comments`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ content: 'Nice post <script>alert(999)</script> indeed' })
+        .expect(201);
+      expect(res2.body.comment.content).toBe('Nice post indeed');
+    });
+  });
+
+  describe('POST /api/posts/:postId/comments/:commentId/reply', () => {
+    it('creates a reply to a comment', async () => {
+      const postId = 'post-reply';
+      const parentId = 'comment-parent';
+      (prismaMock.post.findUnique as jest.Mock).mockResolvedValue({ id: postId, slug: 'post-reply-slug' });
+
+      (prismaMock.comment.findUnique as jest.Mock).mockResolvedValueOnce({ id: parentId, postId });
+
+      (prismaMock.comment.findUnique as jest.Mock).mockResolvedValueOnce({ id: parentId, parentId: null });
+
+      (prismaMock.comment.create as jest.Mock).mockResolvedValue({
+        id: 'comment-reply',
+        content: 'This is a reply',
+        postId,
+        userId,
+        parentId,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        user: { id: userId, username: 'testuser' },
+      });
+
+      const res = await request(app)
+        .post(`/api/posts/${postId}/comments/${parentId}/reply`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ content: 'This is a reply' })
+        .expect(201);
+
+      expect(res.body).toHaveProperty('message', 'Reply created successfully');
+      expect(res.body.comment).toMatchObject({ parentId, postId, content: 'This is a reply' });
+    });
+
+    it('enforces max thread depth of 5', async () => {
+      const postId = 'post-depth';
+      const deepId = 'comment-deep';
+      (prismaMock.post.findUnique as jest.Mock).mockResolvedValue({ id: postId, slug: 'post-depth-slug' });
+
+      (prismaMock.comment.findUnique as jest.Mock).mockResolvedValueOnce({ id: deepId, postId });
+
+      const chain = [1,2,3,4,5];
+      for (let i = 0; i < chain.length; i++) {
+        (prismaMock.comment.findUnique as jest.Mock).mockResolvedValueOnce({ id: `c${i}`, parentId: `c${i+1}` });
+      }
+      (prismaMock.comment.findUnique as jest.Mock).mockResolvedValueOnce({ id: 'c5', parentId: null });
+
+      const res = await request(app)
+        .post(`/api/posts/${postId}/comments/${deepId}/reply`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ content: 'overflow' })
+        .expect(400);
+      expect(res.body).toHaveProperty('error', 'Maximum thread depth of 5 levels reached');
+    });
+  });
+
+  describe('GET /api/posts/:postId/comments', () => {
+    it('returns top-level comments with nested replies and like count', async () => {
+      const postId = 'post-get';
+      (prismaMock.post.findUnique as jest.Mock).mockResolvedValue({ id: postId });
+
+      (prismaMock.comment.findMany as jest.Mock).mockResolvedValueOnce([
+        {
+          id: 'c1',
+          content: 'First comment',
+          postId,
+          userId,
+          parentId: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          user: { id: userId, username: 'testuser' },
+        },
+      ]);
+
+      (prismaMock.commentLike.count as jest.Mock).mockResolvedValueOnce(1);
+
+      (prismaMock.comment.findMany as jest.Mock).mockResolvedValueOnce([
+        {
+          id: 'c1-r1',
+          content: 'Reply to first',
+          postId,
+          userId,
+          parentId: 'c1',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          user: { id: userId, username: 'testuser' },
+        },
+      ]);
+
+      (prismaMock.commentLike.count as jest.Mock).mockResolvedValueOnce(0);
+
+      (prismaMock.comment.findMany as jest.Mock).mockResolvedValueOnce([]);
+
+      const res = await request(app)
+        .get(`/api/posts/${postId}/comments`)
+        .expect(200);
+
+      expect(res.body).toHaveProperty('comments');
+      expect(res.body.comments.length).toBe(1);
+      expect(res.body.comments[0]).toHaveProperty('likeCount', 1);
+      expect(res.body.comments[0].replies.length).toBe(1);
+      expect(res.body.comments[0].replies[0]).toHaveProperty('content', 'Reply to first');
+    });
+  });
+
+  describe('Comment likes', () => {
+    it('likes a comment', async () => {
+      const postId = 'post-like';
+      const commentId = 'c-like';
+      (prismaMock.post.findUnique as jest.Mock).mockResolvedValue({ id: postId, slug: 'post-like-slug' });
+      (prismaMock.comment.findUnique as jest.Mock).mockResolvedValue({ id: commentId, postId });
+      (prismaMock.commentLike.findUnique as jest.Mock).mockResolvedValue(null);
+      (prismaMock.commentLike.create as jest.Mock).mockResolvedValue({ userId, commentId });
+      (prismaMock.commentLike.count as jest.Mock).mockResolvedValue(1);
+
+      const res = await request(app)
+        .post(`/api/posts/${postId}/comments/${commentId}/like`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(201);
+      expect(res.body).toHaveProperty('message', 'Comment liked successfully');
+      expect(res.body).toHaveProperty('likeCount', 1);
+    });
+
+    it('prevents duplicate likes', async () => {
+      const postId = 'post-like-dup';
+      const commentId = 'c-like-dup';
+      (prismaMock.post.findUnique as jest.Mock).mockResolvedValue({ id: postId, slug: 'post-like-dup-slug' });
+      (prismaMock.comment.findUnique as jest.Mock).mockResolvedValue({ id: commentId, postId });
+      (prismaMock.commentLike.findUnique as jest.Mock).mockResolvedValue({ userId, commentId });
+
+      const res = await request(app)
+        .post(`/api/posts/${postId}/comments/${commentId}/like`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(400);
+      expect(res.body).toHaveProperty('error', 'You have already liked this comment');
+    });
+
+    it('unlikes a comment', async () => {
+      const postId = 'post-unlike';
+      const commentId = 'c-unlike';
+      (prismaMock.post.findUnique as jest.Mock).mockResolvedValue({ id: postId, slug: 'post-unlike-slug' });
+      (prismaMock.comment.findUnique as jest.Mock).mockResolvedValue({ id: commentId, postId });
+      (prismaMock.commentLike.findUnique as jest.Mock).mockResolvedValue({ userId, commentId });
+      (prismaMock.commentLike.delete as jest.Mock).mockResolvedValue({});
+      (prismaMock.commentLike.count as jest.Mock).mockResolvedValue(0);
+
+      const res = await request(app)
+        .delete(`/api/posts/${postId}/comments/${commentId}/like`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(200);
+      expect(res.body).toHaveProperty('message', 'Comment unliked successfully');
+      expect(res.body).toHaveProperty('likeCount', 0);
+    });
+  });
+});
