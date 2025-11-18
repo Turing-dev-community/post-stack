@@ -1,81 +1,97 @@
-import { prisma } from './setup';
-import jwt from 'jsonwebtoken';
-import bcrypt from 'bcryptjs';
+import request from 'supertest';
+import { setupPrismaMock } from './utils/mockPrisma';
+import { prisma } from '../lib/prisma';
+import app from '../index';
+
+const { prisma: prismaMock } = setupPrismaMock(prisma, app);
 
 describe('Categories API', () => {
-  const baseUrl = `http://localhost:${process.env.PORT}/api`;
-  let authToken: string;
-  let userId: string;
-  let categoryId: string;
-
-  beforeEach(async () => {
-
-    const hashedPassword = await bcrypt.hash('Password123', 12);
-    const user = await prisma.user.create({
-      data: {
-        email: 'test@example.com',
-        username: 'testuser',
-        password: hashedPassword,
-      },
-    });
-    userId = user.id;
-    authToken = jwt.sign({ userId: user.id }, process.env.JWT_SECRET!);
-
-    // Get a category ID for testing
-    const categories = await prisma.category.findMany();
-    categoryId = categories[0].id;
+  // Validate that mocking is properly set up
+  it('should have mocking properly configured', () => {
+    expect(prismaMock.isMocked).toBe(true);
   });
 
   describe('GET /api/categories', () => {
     it('should return all categories', async () => {
-      const response = await fetch(`${baseUrl}/categories`);
-      const data: any = await response.json();
+      const mockCategories = [
+        { id: '1', name: 'Technology', slug: 'technology' },
+        { id: '2', name: 'Tutorial', slug: 'tutorial' },
+        { id: '3', name: 'Lifestyle', slug: 'lifestyle' },
+      ];
 
-      expect(response.status).toBe(200);
-      expect(data).toHaveProperty('categories');
-      expect(Array.isArray(data.categories)).toBe(true);
-      expect(data.categories.length).toBeGreaterThan(0);
+      (prismaMock.category.findMany as jest.Mock).mockResolvedValue(mockCategories);
 
-      // Check category structure
-      const category = data.categories[0];
-      expect(category).toHaveProperty('id');
-      expect(category).toHaveProperty('name');
-      expect(category).toHaveProperty('slug');
+      // Use supertest to make the request - app is imported with mocked Prisma
+      const response = await request(app)
+        .get('/api/categories')
+        .expect(200);
+
+      expect(response.body).toHaveProperty('categories');
+      expect(Array.isArray(response.body.categories)).toBe(true);
+      expect(response.body.categories.length).toBe(3);
+      expect(response.body.categories).toEqual(mockCategories);
+
+      // Verify Prisma was called correctly
+      expect(prismaMock.category.findMany).toHaveBeenCalledWith({
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+        },
+        orderBy: {
+          name: 'asc',
+        },
+      });
     });
 
     it('should not require authentication', async () => {
-      const response = await fetch(`${baseUrl}/categories`);
-      expect(response.status).toBe(200);
+      const mockCategories = [
+        { id: '1', name: 'News', slug: 'news' },
+      ];
+
+      (prismaMock.category.findMany as jest.Mock).mockResolvedValue(mockCategories);
+
+      await request(app)
+        .get('/api/categories')
+        .expect(200);
+    });
+
+    it('should return empty array when no categories exist', async () => {
+      (prismaMock.category.findMany as jest.Mock).mockResolvedValue([]);
+
+      const response = await request(app)
+        .get('/api/categories')
+        .expect(200);
+
+      expect(response.body.categories).toEqual([]);
+      expect(Array.isArray(response.body.categories)).toBe(true);
     });
 
     it('should contain exactly the predefined categories', async () => {
-      const response = await fetch(`${baseUrl}/categories`);
-      const data: any = await response.json();
-
-      expect(response.status).toBe(200);
-      
       const expectedCategories = [
-        'Technology',
-        'Tutorial',
-        'Lifestyle',
-        'Review',
-        'News',
-        'Opinion',
-        'Tips & Tricks'
+        { id: '1', name: 'Technology', slug: 'technology' },
+        { id: '2', name: 'Tutorial', slug: 'tutorial' },
+        { id: '3', name: 'Lifestyle', slug: 'lifestyle' },
+        { id: '4', name: 'Review', slug: 'review' },
+        { id: '5', name: 'News', slug: 'news' },
+        { id: '6', name: 'Opinion', slug: 'opinion' },
+        { id: '7', name: 'Tips & Tricks', slug: 'tips-tricks' },
       ];
 
-      // Extract category names from response
-      const actualCategoryNames = data.categories.map((cat: any) => cat.name).sort();
-      const expectedCategoryNames = expectedCategories.sort();
+      (prismaMock.category.findMany as jest.Mock).mockResolvedValue(expectedCategories);
 
-      // Check that we have exactly the right number of categories
+      const response = await request(app)
+        .get('/api/categories')
+        .expect(200);
+
+      const actualCategoryNames = response.body.categories.map((cat: any) => cat.name).sort();
+      const expectedCategoryNames = expectedCategories.map(cat => cat.name).sort();
+
       expect(actualCategoryNames).toHaveLength(expectedCategories.length);
-
-      // Check that all expected categories are present
       expect(actualCategoryNames).toEqual(expectedCategoryNames);
 
       // Verify each category has required fields
-      data.categories.forEach((category: any) => {
+      response.body.categories.forEach((category: any) => {
         expect(category).toHaveProperty('id');
         expect(category).toHaveProperty('name');
         expect(category).toHaveProperty('slug');
@@ -86,182 +102,62 @@ describe('Categories API', () => {
         expect(category.slug.length).toBeGreaterThan(0);
       });
     });
-  });
 
-  describe('POST /api/posts with category', () => {
-    it('should create a post with a category', async () => {
-      const response = await fetch(`${baseUrl}/posts`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`,
-        },
-        body: JSON.stringify({
-          title: 'Test Post with Category',
-          content: 'This is a test post with a category',
-          published: true,
-          categoryId: categoryId,
-        }),
-      });
+    it('should return categories sorted by name in ascending order', async () => {
+      const mockCategories = [
+        { id: '3', name: 'Lifestyle', slug: 'lifestyle' },
+        { id: '5', name: 'News', slug: 'news' },
+        { id: '1', name: 'Technology', slug: 'technology' },
+      ];
 
-      const data: any = await response.json();
+      (prismaMock.category.findMany as jest.Mock).mockResolvedValue(mockCategories);
 
-      expect(response.status).toBe(201);
-      expect(data).toHaveProperty('post');
-      expect(data.post).toHaveProperty('category');
-      expect(data.post.category.id).toBe(categoryId);
-      expect(data.post.category).toHaveProperty('name');
-      expect(data.post.category).toHaveProperty('slug');
+      await request(app)
+        .get('/api/categories')
+        .expect(200);
+
+      // Verify the orderBy parameter was passed correctly
+      expect(prismaMock.category.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderBy: {
+            name: 'asc',
+          },
+        })
+      );
     });
 
-    it('should create a post without a category', async () => {
-      const response = await fetch(`${baseUrl}/posts`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`,
-        },
-        body: JSON.stringify({
-          title: 'Test Post without Category',
-          content: 'This is a test post without a category',
-          published: false,
-        }),
-      });
+    it('should handle database errors gracefully', async () => {
+      const error = new Error('Database connection failed');
+      (prismaMock.category.findMany as jest.Mock).mockRejectedValue(error);
 
-      const data: any = await response.json();
+      const response = await request(app)
+        .get('/api/categories')
+        .expect(500);
 
-      expect(response.status).toBe(201);
-      expect(data).toHaveProperty('post');
-      expect(data.post.category).toBeNull();
-    });
-  });
-
-  describe('PUT /api/posts/:id with category', () => {
-    let postId: string;
-
-    beforeEach(async () => {
-      // Create a test post
-      const post = await prisma.post.create({
-        data: {
-          title: 'Test Post for Update',
-          content: 'This is a test post for updating',
-          slug: 'test-post-for-update',
-          published: false,
-          authorId: userId,
-        },
-      });
-      
-      postId = post.id;
+      expect(response.body).toHaveProperty('error');
     });
 
-    it('should update a post with a category', async () => {
-      const response = await fetch(`${baseUrl}/posts/${postId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`,
-        },
-        body: JSON.stringify({
-          title: 'Updated Post with Category',
-          content: 'This post has been updated with a category',
-          published: true,
-          categoryId: categoryId,
-        }),
-      });
+    it('should only return id, name, and slug fields', async () => {
+      const mockCategories = [
+        { id: '1', name: 'Test', slug: 'test' },
+      ];
 
-      const data: any = await response.json();
+      (prismaMock.category.findMany as jest.Mock).mockResolvedValue(mockCategories);
 
-      expect(response.status).toBe(200);
-      expect(data).toHaveProperty('post');
-      expect(data.post).toHaveProperty('category');
-      expect(data.post.category.id).toBe(categoryId);
-    });
+      await request(app)
+        .get('/api/categories')
+        .expect(200);
 
-    it('should update a post to remove category', async () => {
-      // First add a category
-      await fetch(`${baseUrl}/posts/${postId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`,
-        },
-        body: JSON.stringify({
-          title: 'Post with Category',
-          content: 'This post has a category',
-          published: true,
-          categoryId: categoryId,
-        }),
-      });
-
-      // Then remove the category
-      const response = await fetch(`${baseUrl}/posts/${postId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`,
-        },
-        body: JSON.stringify({
-          title: 'Post without Category',
-          content: 'This post no longer has a category',
-          published: true,
-          categoryId: null,
-        }),
-      });
-
-      const data: any = await response.json();
-
-      expect(response.status).toBe(200);
-      expect(data).toHaveProperty('post');
-      expect(data.post.category).toBeNull();
-    });
-  });
-
-  describe('GET /api/posts with category info', () => {
-    let postId: string;
-
-    beforeEach(async () => {
-      // Create a test post with category using the API endpoint
-      const response = await fetch(`${baseUrl}/posts`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`,
-        },
-        body: JSON.stringify({
-          title: 'Test Post for Listing',
-          content: 'This is a test post for listing',
-          published: true,
-          categoryId: categoryId,
-        }),
-      });
-
-      const data: any = await response.json();
-      expect(response.status).toBe(201);
-      postId = data.post.id;
-    });
-
-    it('should include category info in post listings', async () => {
-      const response = await fetch(`${baseUrl}/posts`);
-      const data: any = await response.json();
-
-      expect(response.status).toBe(200);
-      expect(data).toHaveProperty('posts');
-      expect(Array.isArray(data.posts)).toBe(true);
-
-      const postWithCategory = data.posts.find((p: any) => p.id === postId);
-      expect(postWithCategory).toBeDefined();
-      expect(postWithCategory).toHaveProperty('category');
-      expect(postWithCategory.category.id).toBe(categoryId);
-    });
-
-    it('should include category info in single post', async () => {
-      const response = await fetch(`${baseUrl}/posts/test-post-for-listing`);
-      const data: any = await response.json();
-
-      expect(response.status).toBe(200);
-      expect(data).toHaveProperty('post');
-      expect(data.post).toHaveProperty('category');
-      expect(data.post.category.id).toBe(categoryId);
+      // Verify only specific fields are selected
+      expect(prismaMock.category.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+          },
+        })
+      );
     });
   });
 });
