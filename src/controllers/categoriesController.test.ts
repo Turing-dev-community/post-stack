@@ -1,20 +1,31 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
-import { CategoriesController } from './categories.controller';
-import { mockDeep, DeepMockProxy } from 'jest-mock-extended';
+import * as categoriesController from './categoriesController';
+import { setupPrismaMock, MockedPrismaClient } from '../test/utils/mockPrisma';
+import { mockDeep } from 'jest-mock-extended';
+
+// Mock the prisma module BEFORE importing
+jest.mock('../lib/prisma', () => {
+  const { PrismaClient } = require('@prisma/client');
+  return {
+    __esModule: true,
+    prisma: mockDeep(PrismaClient),
+  };
+});
+
+// Import prisma AFTER mocks are set up
+import { prisma } from '../lib/prisma';
+
+// Setup Prisma mock at the top level (before describe block)
+const { prisma: prismaMock } = setupPrismaMock(prisma, {} as any);
 
 describe('CategoriesController', () => {
-  let controller: CategoriesController;
-  let mockPrisma: DeepMockProxy<PrismaClient>;
   let mockRequest: Partial<Request>;
   let mockResponse: Partial<Response>;
   let jsonMock: jest.Mock;
   let statusMock: jest.Mock;
 
   beforeEach(() => {
-    // Create a mock Prisma client
-    mockPrisma = mockDeep<PrismaClient>();
-    controller = new CategoriesController(mockPrisma as unknown as PrismaClient);
 
     // Setup mock response
     jsonMock = jest.fn().mockReturnThis();
@@ -39,11 +50,11 @@ describe('CategoriesController', () => {
         { id: '3', name: 'Technology', slug: 'technology' },
       ];
 
-      (mockPrisma.category.findMany as jest.Mock).mockResolvedValue(mockCategories);
+      (prismaMock.category.findMany as jest.Mock).mockResolvedValue(mockCategories);
 
-      await controller.getAllCategories(mockRequest as Request, mockResponse as Response);
+      await categoriesController.getAllCategories(mockRequest as Request, mockResponse as Response);
 
-      expect(mockPrisma.category.findMany).toHaveBeenCalledWith({
+      expect(prismaMock.category.findMany).toHaveBeenCalledWith({
         select: {
           id: true,
           name: true,
@@ -62,11 +73,11 @@ describe('CategoriesController', () => {
     });
 
     it('should return empty array when no categories exist', async () => {
-      (mockPrisma.category.findMany as jest.Mock).mockResolvedValue([]);
+      (prismaMock.category.findMany as jest.Mock).mockResolvedValue([]);
 
-      await controller.getAllCategories(mockRequest as Request, mockResponse as Response);
+      await categoriesController.getAllCategories(mockRequest as Request, mockResponse as Response);
 
-      expect(mockPrisma.category.findMany).toHaveBeenCalled();
+      expect(prismaMock.category.findMany).toHaveBeenCalled();
       expect(jsonMock).toHaveBeenCalledWith({
         categories: [],
       });
@@ -74,13 +85,13 @@ describe('CategoriesController', () => {
 
     it('should handle database errors', async () => {
       const error = new Error('Database connection failed');
-      (mockPrisma.category.findMany as jest.Mock).mockRejectedValue(error);
+      (prismaMock.category.findMany as jest.Mock).mockRejectedValue(error);
 
       await expect(
-        controller.getAllCategories(mockRequest as Request, mockResponse as Response)
+        categoriesController.getAllCategories(mockRequest as Request, mockResponse as Response)
       ).rejects.toThrow('Database connection failed');
 
-      expect(mockPrisma.category.findMany).toHaveBeenCalled();
+      expect(prismaMock.category.findMany).toHaveBeenCalled();
     });
 
     it('should return categories in ascending order by name', async () => {
@@ -90,11 +101,11 @@ describe('CategoriesController', () => {
         { id: '3', name: 'C Category', slug: 'c-category' },
       ];
 
-      (mockPrisma.category.findMany as jest.Mock).mockResolvedValue(mockCategories);
+      (prismaMock.category.findMany as jest.Mock).mockResolvedValue(mockCategories);
 
-      await controller.getAllCategories(mockRequest as Request, mockResponse as Response);
+      await categoriesController.getAllCategories(mockRequest as Request, mockResponse as Response);
 
-      expect(mockPrisma.category.findMany).toHaveBeenCalledWith(
+      expect(prismaMock.category.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           orderBy: {
             name: 'asc',
@@ -108,11 +119,11 @@ describe('CategoriesController', () => {
         { id: '1', name: 'Test', slug: 'test' },
       ];
 
-      (mockPrisma.category.findMany as jest.Mock).mockResolvedValue(mockCategories);
+      (prismaMock.category.findMany as jest.Mock).mockResolvedValue(mockCategories);
 
-      await controller.getAllCategories(mockRequest as Request, mockResponse as Response);
+      await categoriesController.getAllCategories(mockRequest as Request, mockResponse as Response);
 
-      expect(mockPrisma.category.findMany).toHaveBeenCalledWith(
+      expect(prismaMock.category.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           select: {
             id: true,
@@ -128,9 +139,9 @@ describe('CategoriesController', () => {
         { id: '1', name: 'Test', slug: 'test' },
       ];
 
-      (mockPrisma.category.findMany as jest.Mock).mockResolvedValue(mockCategories);
+      (prismaMock.category.findMany as jest.Mock).mockResolvedValue(mockCategories);
 
-      const result = await controller.getAllCategories(
+      const result = await categoriesController.getAllCategories(
         mockRequest as Request,
         mockResponse as Response
       );

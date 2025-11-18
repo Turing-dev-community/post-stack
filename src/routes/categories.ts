@@ -1,12 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { asyncHandler } from '../middleware/validation';
-import { CategoriesController } from '../controllers/categories.controller';
-import { prisma } from '../lib/prisma';
-import { authenticateToken, AuthRequest, generateSlug } from '../utils/auth';
-import { requireAdmin } from '../middleware/authorization';
+import * as categoriesController from '../controllers/categoriesController';
 
 const router = Router();
-const categoriesController = new CategoriesController(prisma);
 
 router.get('/', asyncHandler(
   (req: Request, res: Response) => categoriesController.getAllCategories(req, res)
