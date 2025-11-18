@@ -2,6 +2,7 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { Request, Response, NextFunction } from 'express';
 import { prisma } from '../lib/prisma';
+import type { User } from '@prisma/client';
 
 export interface AuthRequest extends Request {
   user?: {
@@ -42,7 +43,7 @@ export const authenticateToken = async (
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: string };
 
-    const user = await prisma.user.findUnique({
+    const user: User | null = await prisma.user.findUnique({
       where: { id: decoded.userId },
     });
 
@@ -51,8 +52,7 @@ export const authenticateToken = async (
       return;
     }
 
-    const userAny = user as any;
-    if (userAny && userAny.deletedAt) {
+    if (user.deletedAt) {
       res.status(403).json({ error: 'Account has been deactivated' });
       return;
     }

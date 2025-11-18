@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { asyncHandler } from '../middleware/validation';
 import { AuthRequest, comparePassword, generateToken, hashPassword } from '../utils/auth';
 import { prisma } from '../lib/prisma';
+import type { User } from '@prisma/client';
 
 export const signup = asyncHandler(async (req: AuthRequest, res: Response) => {
   const { email, username, password } = req.body;
@@ -32,13 +33,12 @@ export const signup = asyncHandler(async (req: AuthRequest, res: Response) => {
 export const login = asyncHandler(async (req: AuthRequest, res: Response) => {
   const { email, password } = req.body;
 
-  const user = await prisma.user.findUnique({ where: { email } });
+  const user: User | null = await prisma.user.findUnique({ where: { email } });
   if (!user) {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
 
-  const userAny = user as any;
-  if (userAny && userAny.deletedAt) {
+  if (user.deletedAt) {
     return res.status(403).json({
       error: 'Account has been deactivated',
       message:
@@ -46,7 +46,7 @@ export const login = asyncHandler(async (req: AuthRequest, res: Response) => {
     });
   }
 
-  const isPasswordValid = await comparePassword(password, (user as any).password);
+  const isPasswordValid = await comparePassword(password, user.password);
   if (!isPasswordValid) {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
@@ -54,7 +54,7 @@ export const login = asyncHandler(async (req: AuthRequest, res: Response) => {
   const token = generateToken(user.id);
   return res.json({
     message: 'Login successful',
-    user: { id: (user as any).id, email: (user as any).email, username: (user as any).username },
+    user: { id: user.id, email: user.email, username: user.username },
     token,
   });
 });
@@ -121,20 +121,20 @@ export const deactivateAccount = asyncHandler(async (req: AuthRequest, res: Resp
     return res.status(401).json({ error: 'Authentication required' });
   }
 
-  const user = (await prisma.user.findUnique({ where: { id: req.user.id } })) as any;
+  const user: User | null = await prisma.user.findUnique({ where: { id: req.user.id } });
 
   if (!user) {
     return res.status(404).json({ error: 'User not found' });
   }
 
-  if (user && user.deletedAt) {
+  if (user.deletedAt) {
     return res.status(400).json({
       error: 'Account already deactivated',
       message: 'This account has already been deactivated.',
     });
   }
 
-  await prisma.user.update({ where: { id: req.user.id }, data: { deletedAt: new Date() } as any });
+  await prisma.user.update({ where: { id: req.user.id }, data: { deletedAt: new Date() } });
 
   return res.json({
     message: 'Account deactivated successfully',
