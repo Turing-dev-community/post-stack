@@ -1100,6 +1100,79 @@ describe('Blog Post Routes', () => {
       expect(post?.authorId).toBe(userId);
     });
 
+    it('should trim title and content on creation', async () => {
+      const postData = {
+        title: '   Trimmed Title   ',
+        content: '   # Trimmed Content   ',
+        published: false,
+      };
+
+      const response = await fetch(`${baseUrl}/posts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`,
+        },
+        body: JSON.stringify(postData),
+      });
+
+      const data: any = await response.json();
+
+      expect(response.status).toBe(201);
+      expect(data).toHaveProperty('post');
+      expect(data.post.title).toBe('Trimmed Title');
+      expect(data.post.content).toBe('# Trimmed Content');
+      expect(data.post.slug).toBe('trimmed-title');
+    });
+
+    it('should sanitize script tags in title and meta fields', async () => {
+      const postData = {
+        title: '<script>alert(1)</script> Malicious Title',
+        content: '# Safe Content',
+        metaTitle: 'Meta <script>alert(2)</script> Title',
+        metaDescription: 'Desc <script>alert(3)</script> ription',
+        published: true,
+      };
+
+      const response = await fetch(`${baseUrl}/posts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`,
+        },
+        body: JSON.stringify(postData),
+      });
+
+      const data: any = await response.json();
+      expect(response.status).toBe(201);
+      expect(data.post.title).toBe('Malicious Title');
+      expect(data.post.metaTitle).toBe('Meta Title');
+      expect(data.post.metaDescription).toBe('Desc ription');
+      expect(data.post.slug).toContain('malicious-title');
+    });
+
+    it('should reject title with only whitespace', async () => {
+      const postData = {
+        title: '    ',
+        content: '# Content',
+        published: false,
+      };
+
+      const response = await fetch(`${baseUrl}/posts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`,
+        },
+        body: JSON.stringify(postData),
+      });
+
+      const data: any = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(data).toHaveProperty('error', 'Validation failed');
+    });
+
     it('should return error when not authenticated', async () => {
       const postData = {
         title: 'New Test Post',
@@ -1323,6 +1396,31 @@ describe('Blog Post Routes', () => {
       expect(response.status).toBe(201);
       expect(data).toHaveProperty('message', 'Post created successfully');
       expect(data.post.ogImage).toBe(postData.ogImage);
+    });
+
+    it('should trim SEO fields and ogImage URL', async () => {
+      const postData = {
+        title: 'SEO Trim Test',
+        content: '# SEO Trim Content',
+        metaTitle: '   Custom SEO Title   ',
+        metaDescription: '   This is a custom meta description   ',
+        ogImage: '   https://example.com/image.jpg   ',
+      };
+
+      const response = await fetch(`${baseUrl}/posts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`,
+        },
+        body: JSON.stringify(postData),
+      });
+
+      const data: any = await response.json();
+      expect(response.status).toBe(201);
+      expect(data.post.metaTitle).toBe('Custom SEO Title');
+      expect(data.post.metaDescription).toBe('This is a custom meta description');
+      expect(data.post.ogImage).toBe('https://example.com/image.jpg');
     });
 
     it('should create a post with featured status', async () => {
@@ -1722,8 +1820,8 @@ describe('Blog Post Routes', () => {
       expect(response.status).toBe(200);
       expect(data).toHaveProperty('message', 'Post updated successfully');
       expect(data).toHaveProperty('post');
-      expect(data.post.metaTitle).toBeNull();
-      expect(data.post.metaDescription).toBeNull();
+      expect(data.post.metaTitle).toBe('');
+      expect(data.post.metaDescription).toBe('');
       expect(data.post.ogImage).toBeNull();
     });
 
@@ -2818,6 +2916,60 @@ describe('Blog Post Routes', () => {
 
       expect(response.status).toBe(401);
       expect(data).toHaveProperty('error', 'Access token required');
+    });
+
+    it('should trim comment content', async () => {
+      const post = await prisma.post.create({
+        data: {
+          title: 'Trim Comment Post',
+          content: '# Test Content',
+          slug: 'trim-comment-post',
+          published: true,
+          authorId: userId,
+        },
+      });
+
+      const response = await fetch(`${baseUrl}/posts/${post.id}/comments`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({
+          content: '   This comment should be trimmed.   ',
+        }),
+      });
+
+      const data: any = await response.json();
+      expect(response.status).toBe(201);
+      expect(data.comment.content).toBe('This comment should be trimmed.');
+    });
+
+    it('should sanitize script tags in comment content', async () => {
+      const post = await prisma.post.create({
+        data: {
+          title: 'Script Comment Post',
+          content: '# Test Content',
+          slug: 'script-comment-post',
+          published: true,
+          authorId: userId,
+        },
+      });
+
+      const response = await fetch(`${baseUrl}/posts/${post.id}/comments`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({
+          content: 'Nice post <script>alert(999)</script> indeed',
+        }),
+      });
+
+      const data: any = await response.json();
+      expect(response.status).toBe(201);
+      expect(data.comment.content).toBe('Nice post indeed');
     });
   });
 

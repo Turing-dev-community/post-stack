@@ -109,6 +109,32 @@ describe('Authentication Routes', () => {
       expect(response.status).toBe(400);
       expect(data).toHaveProperty('error', 'Validation failed');
     });
+
+    it('should trim email and username on signup', async () => {
+      const userData = {
+        email: '   spaced@example.com   ',
+        username: '   spaceduser   ',
+        password: 'Password123',
+      };
+
+      const response = await fetch(`${baseUrl}/auth/signup`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(userData),
+      });
+
+      const data: any = await response.json();
+
+      expect(response.status).toBe(201);
+      expect(data.user.email).toBe('spaced@example.com');
+      expect(data.user.username).toBe('spaceduser');
+
+      const userInDb = await prisma.user.findUnique({ where: { email: 'spaced@example.com' } });
+      expect(userInDb).toBeTruthy();
+      expect(userInDb?.username).toBe('spaceduser');
+    });
   });
 
   describe('POST /api/auth/login', () => {
@@ -194,6 +220,35 @@ describe('Authentication Routes', () => {
 
       expect(response.status).toBe(401);
       expect(data).toHaveProperty('error', 'Invalid credentials');
+    });
+
+    it('should login successfully with trimmed email', async () => {
+      const hashedPassword = await bcrypt.hash('Password123', 12);
+      await prisma.user.create({
+        data: {
+          email: 'trimlogin@example.com',
+          username: 'trimlogin',
+          password: hashedPassword,
+        },
+      });
+
+      const loginData = {
+        email: '   trimlogin@example.com   ',
+        password: 'Password123',
+      };
+
+      const response = await fetch(`${baseUrl}/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(loginData),
+      });
+
+      const data: any = await response.json();
+      expect(response.status).toBe(200);
+      expect(data).toHaveProperty('message', 'Login successful');
+      expect(data.user.email).toBe('trimlogin@example.com');
     });
   });
 
@@ -434,6 +489,68 @@ describe('Authentication Routes', () => {
       expect(response.status).toBe(401);
       const data: any = await response.json();
       expect(data).toHaveProperty('error', 'Access token required');
+    });
+
+    it('should trim profilePicture and about on update', async () => {
+      const hashedPassword = await bcrypt.hash('Password123', 12);
+      const user = await prisma.user.create({
+        data: {
+          email: 'trimprofile@example.com',
+          username: 'trimprofile',
+          password: hashedPassword,
+        },
+      });
+
+      const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET!, { expiresIn: '1d' });
+
+      const updateData = {
+        profilePicture: '   https://example.com/pic.jpg   ',
+        about: '   This about will be trimmed.   ',
+      };
+
+      const response = await fetch(`${baseUrl}/auth/profile`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(updateData),
+      });
+
+      const data: any = await response.json();
+      expect(response.status).toBe(200);
+      expect(data.user.profilePicture).toBe('https://example.com/pic.jpg');
+      expect(data.user.about).toBe('This about will be trimmed.');
+    });
+
+    it('should sanitize script tags in about field', async () => {
+      const hashedPassword = await bcrypt.hash('Password123', 12);
+      const user = await prisma.user.create({
+        data: {
+          email: 'sanitizeprofile@example.com',
+          username: 'sanitizeprofile',
+          password: hashedPassword,
+        },
+      });
+
+      const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET!, { expiresIn: '1d' });
+
+      const updateData = {
+        about: 'Hello <script>alert(1)</script> World',
+      };
+
+      const response = await fetch(`${baseUrl}/auth/profile`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(updateData),
+      });
+
+      const data: any = await response.json();
+      expect(response.status).toBe(200);
+      expect(data.user.about).toBe('Hello World');
     });
   });
 
