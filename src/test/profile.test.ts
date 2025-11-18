@@ -3,9 +3,6 @@ import { setupPrismaMock } from './utils/mockPrisma';
 import { prisma } from '../lib/prisma';
 import app from '../index';
 import { generateToken } from '../utils/auth';
-import { prisma as itPrisma } from './setup';
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
 
 const { prisma: prismaMock } = setupPrismaMock(prisma, app);
 
@@ -261,48 +258,30 @@ describe('Profile Routes', () => {
 });
 
 describe('GET /api/profile - follower counts', () => {
-  const baseUrl = `http://localhost:${process.env.PORT}/api`;
-  let authToken: string;
-  let userId: string;
-  let otherUserId: string;
-
-  beforeEach(async () => {
-    const hashedPassword = await bcrypt.hash('Password123', 12);
-
-    const user = await itPrisma.user.create({
-      data: { email: 'profileint@example.com', username: 'profileint', password: hashedPassword },
-    });
-    userId = user.id;
-    authToken = jwt.sign({ userId: user.id }, process.env.JWT_SECRET!);
-
-    const otherUser = await itPrisma.user.create({
-      data: { email: 'profileother@example.com', username: 'profileother', password: hashedPassword },
-    });
-    otherUserId = otherUser.id;
-  });
-
   it('returns follower and following counts', async () => {
-    for (let i = 1; i <= 3; i++) {
-      const u = await itPrisma.user.create({
-        data: {
-          email: `pfollower${i}@example.com`,
-          username: `pfollower${i}`,
-          password: await bcrypt.hash('Password123', 12),
-        },
-      });
-      await itPrisma.follow.create({ data: { followerId: u.id, followingId: userId } });
-    }
+    const userId = 'user-100';
 
-    await itPrisma.follow.create({ data: { followerId: userId, followingId: otherUserId } });
-
-    const response = await fetch(`${baseUrl}/profile`, {
-      method: 'GET',
-      headers: { Authorization: `Bearer ${authToken}` },
+    (prismaMock.user.findUnique as unknown as jest.Mock).mockResolvedValue({
+      id: userId,
+      email: 'profilecounts@example.com',
+      username: 'profilecounts',
+      deletedAt: null,
+      _count: { posts: 2 },
     });
 
-    const data: any = await response.json();
+    (prismaMock.follow.count as unknown as jest.Mock)
+      .mockResolvedValueOnce(3) 
+      .mockResolvedValueOnce(1);
 
-    expect(response.status).toBe(200);
+    const token = generateToken(userId);
+
+    const response = await request(app)
+      .get('/api/profile')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    const data = response.body;
+
     expect(data).toHaveProperty('user');
     expect(data.user).toHaveProperty('followerCount', 3);
     expect(data.user).toHaveProperty('followingCount', 1);
