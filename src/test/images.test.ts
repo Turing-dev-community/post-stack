@@ -1,12 +1,3 @@
-import { PrismaClient } from "@prisma/client";
-import { mockDeep } from "jest-mock-extended";
-
-// Mock the prisma module BEFORE importing prisma/app
-jest.mock("../lib/prisma", () => ({
-	__esModule: true,
-	prisma: mockDeep<PrismaClient>(),
-}));
-
 import request from "supertest";
 import { setupPrismaMock } from "./utils/mockPrisma";
 import jwt from "jsonwebtoken";
