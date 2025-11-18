@@ -252,4 +252,225 @@ describe('Authentication Routes (mocked)', () => {
       expect(response.body).toHaveProperty('error', 'Account has been deactivated');
     });
   });
+
+  describe('PUT /api/auth/password', () => {
+    it('should change password successfully with valid credentials', async () => {
+      const userId = 'user-1';
+      const currentPassword = 'Password123';
+      const newPassword = 'NewPassword456';
+      const hashedCurrentPassword = await bcrypt.hash(currentPassword, 12);
+
+      // Mock user lookup for authentication
+      (prismaMock.user.findUnique as unknown as jest.Mock)
+        .mockResolvedValueOnce({
+          id: userId,
+          email: 'test@example.com',
+          username: 'testuser',
+        })
+        // Mock user lookup in controller
+        .mockResolvedValueOnce({
+          id: userId,
+          email: 'test@example.com',
+          username: 'testuser',
+          password: hashedCurrentPassword,
+          deletedAt: null,
+        });
+
+      // Mock password update
+      (prismaMock.user.update as unknown as jest.Mock).mockResolvedValue({
+        id: userId,
+        email: 'test@example.com',
+        username: 'testuser',
+      });
+
+      const token = generateToken(userId);
+      const response = await request(app)
+        .put('/api/auth/password')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          currentPassword,
+          newPassword,
+        })
+        .expect(200);
+
+      expect(response.body).toHaveProperty('message', 'Password changed successfully');
+      expect(prismaMock.user.update).toHaveBeenCalled();
+    });
+
+    it('should return error when current password is incorrect', async () => {
+      const userId = 'user-1';
+      const currentPassword = 'WrongPassword123';
+      const newPassword = 'NewPassword456';
+      const hashedCurrentPassword = await bcrypt.hash('Password123', 12);
+
+      // Mock user lookup for authentication
+      (prismaMock.user.findUnique as unknown as jest.Mock)
+        .mockResolvedValueOnce({
+          id: userId,
+          email: 'test@example.com',
+          username: 'testuser',
+        })
+        // Mock user lookup in controller
+        .mockResolvedValueOnce({
+          id: userId,
+          email: 'test@example.com',
+          username: 'testuser',
+          password: hashedCurrentPassword,
+          deletedAt: null,
+        });
+
+      const token = generateToken(userId);
+      const response = await request(app)
+        .put('/api/auth/password')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          currentPassword,
+          newPassword,
+        })
+        .expect(401);
+
+      expect(response.body).toHaveProperty('error', 'Current password is incorrect');
+      expect(prismaMock.user.update).not.toHaveBeenCalled();
+    });
+
+    it('should return validation error for weak new password', async () => {
+      const userId = 'user-1';
+      const token = generateToken(userId);
+
+      // Mock user lookup for authentication
+      (prismaMock.user.findUnique as unknown as jest.Mock).mockResolvedValueOnce({
+        id: userId,
+        email: 'test@example.com',
+        username: 'testuser',
+      });
+
+      const response = await request(app)
+        .put('/api/auth/password')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          currentPassword: 'Password123',
+          newPassword: 'weak',
+        })
+        .expect(400);
+
+      expect(response.body).toHaveProperty('error', 'Validation failed');
+      expect(response.body.details).toBeDefined();
+    });
+
+    it('should return validation error when new password is same as current', async () => {
+      const userId = 'user-1';
+      const token = generateToken(userId);
+
+      // Mock user lookup for authentication
+      (prismaMock.user.findUnique as unknown as jest.Mock).mockResolvedValueOnce({
+        id: userId,
+        email: 'test@example.com',
+        username: 'testuser',
+      });
+
+      const response = await request(app)
+        .put('/api/auth/password')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          currentPassword: 'Password123',
+          newPassword: 'Password123',
+        })
+        .expect(400);
+
+      expect(response.body).toHaveProperty('error', 'Validation failed');
+      expect(response.body.details).toBeDefined();
+    });
+
+    it('should return error when not authenticated', async () => {
+      const response = await request(app)
+        .put('/api/auth/password')
+        .send({
+          currentPassword: 'Password123',
+          newPassword: 'NewPassword456',
+        })
+        .expect(401);
+
+      expect(response.body).toHaveProperty('error', 'Access token required');
+    });
+
+    it('should return error when account is deactivated', async () => {
+      const userId = 'user-1';
+      const currentPassword = 'Password123';
+      const newPassword = 'NewPassword456';
+      const hashedCurrentPassword = await bcrypt.hash(currentPassword, 12);
+
+      // Mock user lookup for authentication
+      (prismaMock.user.findUnique as unknown as jest.Mock)
+        .mockResolvedValueOnce({
+          id: userId,
+          email: 'test@example.com',
+          username: 'testuser',
+        })
+        // Mock user lookup in controller (deactivated)
+        .mockResolvedValueOnce({
+          id: userId,
+          email: 'test@example.com',
+          username: 'testuser',
+          password: hashedCurrentPassword,
+          deletedAt: new Date(),
+        });
+
+      const token = generateToken(userId);
+      const response = await request(app)
+        .put('/api/auth/password')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          currentPassword,
+          newPassword,
+        })
+        .expect(403);
+
+      expect(response.body).toHaveProperty('error', 'Account has been deactivated');
+      expect(prismaMock.user.update).not.toHaveBeenCalled();
+    });
+
+    it('should return validation error when current password is missing', async () => {
+      const userId = 'user-1';
+      const token = generateToken(userId);
+
+      // Mock user lookup for authentication
+      (prismaMock.user.findUnique as unknown as jest.Mock).mockResolvedValueOnce({
+        id: userId,
+        email: 'test@example.com',
+        username: 'testuser',
+      });
+
+      const response = await request(app)
+        .put('/api/auth/password')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          newPassword: 'NewPassword456',
+        })
+        .expect(400);
+
+      expect(response.body).toHaveProperty('error', 'Validation failed');
+    });
+
+    it('should return validation error when new password is missing', async () => {
+      const userId = 'user-1';
+      const token = generateToken(userId);
+
+      // Mock user lookup for authentication
+      (prismaMock.user.findUnique as unknown as jest.Mock).mockResolvedValueOnce({
+        id: userId,
+        email: 'test@example.com',
+        username: 'testuser',
+      });
+
+      const response = await request(app)
+        .put('/api/auth/password')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          currentPassword: 'Password123',
+        })
+        .expect(400);
+
+      expect(response.body).toHaveProperty('error', 'Validation failed');
+    });
+  });
 });

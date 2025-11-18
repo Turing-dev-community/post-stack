@@ -59,6 +59,45 @@ export const login = asyncHandler(async (req: AuthRequest, res: Response) => {
   });
 });
 
+
+export const changePassword = asyncHandler(async (req: AuthRequest, res: Response) => {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+
+  const { currentPassword, newPassword } = req.body;
+
+  const user: User | null = await prisma.user.findUnique({ where: { id: req.user.id } });
+
+  if (!user) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+
+  if (user.deletedAt) {
+    return res.status(403).json({
+      error: 'Account has been deactivated',
+      message: 'This account has been deactivated. Please contact support if you believe this is an error.',
+    });
+  }
+
+  const isCurrentPasswordValid = await comparePassword(currentPassword, user.password);
+  if (!isCurrentPasswordValid) {
+    return res.status(401).json({
+      error: 'Current password is incorrect',
+    });
+  }
+
+  const hashedNewPassword = await hashPassword(newPassword);
+  await prisma.user.update({
+    where: { id: req.user.id },
+    data: { password: hashedNewPassword },
+  });
+
+  return res.json({
+    message: 'Password changed successfully',
+  });
+});
+
 export const deactivateAccount = asyncHandler(async (req: AuthRequest, res: Response) => {
   if (!req.user) {
     return res.status(401).json({ error: 'Authentication required' });

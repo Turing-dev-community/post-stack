@@ -147,3 +147,21 @@ export const validatePagination = [
     .withMessage("Limit must be between 1 and 100")
     .toInt(),
 ];
+
+export const validatePasswordChange = [
+  body("currentPassword")
+    .notEmpty()
+    .withMessage("Current password is required"),
+  body("newPassword")
+    .isLength({ min: 8 })
+    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
+    .withMessage(
+      "Password must be at least 8 characters with uppercase, lowercase, and number"
+    )
+    .custom((value, { req }) => {
+      if (value === req.body.currentPassword) {
+        throw new Error("New password must be different from current password");
+      }
+      return true;
+    }),
+];
