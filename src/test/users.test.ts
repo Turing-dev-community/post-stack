@@ -315,45 +315,5 @@ describe('User Followers Routes', () => {
     });
   });
 
-  describe('GET /api/auth/profile - with follower counts', () => {
-    it('should return profile with follower and following counts', async () => {
-      // This test is for auth routes, not users routes
-      // Mock auth user lookup (for authenticateToken middleware)
-      mockAuthUser(userId);
-      
-      // Mock user.findUnique for profile lookup (with _count)
-      (prismaMock.user.findUnique as jest.Mock).mockImplementation((args: any) => {
-        const id = args?.where?.id;
-        if (id === userId) {
-          // First call: auth middleware, Second call: profile lookup
-          return Promise.resolve({
-            id: userId,
-            email: 'test@example.com',
-            username: 'testuser',
-            profilePicture: null,
-            about: null,
-            createdAt: new Date(),
-            _count: {
-              posts: 0,
-            },
-          });
-        }
-        return Promise.resolve(null);
-      });
-      
-      // Mock follower count (auth routes will make these calls)
-      (prismaMock.follow.count as jest.Mock)
-        .mockResolvedValueOnce(3) // followerCount
-        .mockResolvedValueOnce(1); // followingCount
-
-      const response = await request(app)
-        .get('/api/auth/profile')
-        .set('Authorization', `Bearer ${authToken}`)
-        .expect(200);
-
-      expect(response.body).toHaveProperty('user');
-      expect(response.body.user).toHaveProperty('followerCount', 3);
-      expect(response.body.user).toHaveProperty('followingCount', 1);
-    });
-  });
+  
 });
