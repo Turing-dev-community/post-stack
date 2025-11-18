@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authenticateToken, generateSlug } from '../utils/auth';
-import { validatePost, validateComment } from '../middleware/validators';
+import { validatePost, validateComment, validatePagination } from '../middleware/validators';
 import { handleValidationErrors, asyncHandler } from '../middleware/validation';
 import { AuthRequest } from '../utils/auth';
 import { cacheMiddleware, invalidateCache } from '../middleware/cache';
@@ -10,7 +10,7 @@ import { CACHE_CONFIG } from '../constants/cache';
 const router = Router();
 const prisma = new PrismaClient();
 
-router.get('/', cacheMiddleware(CACHE_CONFIG.TTL_POSTS_LIST), asyncHandler(async (req: AuthRequest, res: Response) => {
+router.get('/', validatePagination, handleValidationErrors, cacheMiddleware(CACHE_CONFIG.TTL_POSTS_LIST), asyncHandler(async (req: AuthRequest, res: Response) => {
   const page = parseInt(req.query.page as string) || 1;
   const limit = parseInt(req.query.limit as string) || 10;
   const titleQuery = req.query.title as string;
@@ -129,7 +129,7 @@ router.get('/', cacheMiddleware(CACHE_CONFIG.TTL_POSTS_LIST), asyncHandler(async
 }));
 
 // Get trending posts (published in last 30 days)
-router.get('/trending', cacheMiddleware(CACHE_CONFIG.TTL_POSTS_LIST), asyncHandler(async (req: AuthRequest, res: Response) => {
+router.get('/trending', validatePagination, handleValidationErrors, cacheMiddleware(CACHE_CONFIG.TTL_POSTS_LIST), asyncHandler(async (req: AuthRequest, res: Response) => {
   const page = parseInt(req.query.page as string) || 1;
   const limit = parseInt(req.query.limit as string) || 10;
   const skip = (page - 1) * limit;
@@ -194,7 +194,7 @@ router.get('/trending', cacheMiddleware(CACHE_CONFIG.TTL_POSTS_LIST), asyncHandl
 }));
 
 // Get all posts for authenticated user (including unpublished)
-router.get('/my-posts', authenticateToken, cacheMiddleware(CACHE_CONFIG.TTL_POSTS_LIST), asyncHandler(async (req: AuthRequest, res: Response) => {
+router.get('/my-posts', authenticateToken, validatePagination, handleValidationErrors, cacheMiddleware(CACHE_CONFIG.TTL_POSTS_LIST), asyncHandler(async (req: AuthRequest, res: Response) => {
   if (!req.user) {
     return res.status(401).json({
       error: 'Authentication required',
@@ -267,7 +267,7 @@ router.get('/my-posts', authenticateToken, cacheMiddleware(CACHE_CONFIG.TTL_POST
 }));
 
 // Get saved posts for authenticated user
-router.get('/saved', authenticateToken, cacheMiddleware(CACHE_CONFIG.TTL_POSTS_LIST), asyncHandler(async (req: AuthRequest, res: Response) => {
+router.get('/saved', authenticateToken, validatePagination, handleValidationErrors, cacheMiddleware(CACHE_CONFIG.TTL_POSTS_LIST), asyncHandler(async (req: AuthRequest, res: Response) => {
   if (!req.user) {
     return res.status(401).json({
       error: 'Authentication required',
