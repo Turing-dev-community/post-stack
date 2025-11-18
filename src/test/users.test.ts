@@ -1,29 +1,17 @@
-/// <reference types="jest" />
-
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
-import { PrismaClient } from '@prisma/client';
-import { mockDeep, DeepMockProxy } from 'jest-mock-extended';
-import { mockReset } from 'jest-mock-extended';
-
-// Mock Prisma at the top (before imports)
-jest.mock('../lib/prisma', () => ({
-  __esModule: true,
-  prisma: mockDeep<PrismaClient>(),
-}));
-
-// Import after mock
+import { setupPrismaMock } from './utils/mockPrisma';
+// Import prisma and app AFTER mocks are set up
 import { prisma } from '../lib/prisma';
 import app from '../index';
 
-const prismaMock = prisma as unknown as DeepMockProxy<PrismaClient>;
-
-// Reset mocks before each test
-beforeEach(() => {
-  mockReset(prismaMock);
-});
+const { prisma: prismaMock } = setupPrismaMock(prisma, app);
 
 describe('User Followers Routes', () => {
+  // Validate that mocking is properly set up
+  it('should have mocking properly configured', () => {
+    expect(prismaMock.isMocked).toBe(true);
+  });
   let authToken: string;
   let userId: string;
   let otherUserToken: string;

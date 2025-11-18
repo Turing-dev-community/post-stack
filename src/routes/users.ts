@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authenticateToken } from '../utils/auth';
-import { usersController } from '../controllers/usersController';
+import { followUser, unfollowUser, getFollowers, getFollowing } from '../controllers/usersController';
 import { validatePagination } from '../middleware/validators';
 import { handleValidationErrors } from '../middleware/validation';
 
@@ -9,27 +9,27 @@ const router = Router();
 router.post(
   '/:userId/follow',
   authenticateToken,
-  usersController.followUser
+  followUser
 );
 
 router.delete(
   '/:userId/follow',
   authenticateToken,
-  usersController.unfollowUser
+  unfollowUser
 );
 
 router.get(
   '/:userId/followers',
   validatePagination,
   handleValidationErrors,
-  usersController.getFollowers
+  getFollowers
 );
 
 router.get(
   '/:userId/following',
   validatePagination,
   handleValidationErrors,
-  usersController.getFollowing
+  getFollowing
 );
 
 export default router;
