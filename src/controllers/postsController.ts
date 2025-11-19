@@ -193,6 +193,83 @@ export async function getTrendingPosts(req: AuthRequest, res: Response): Promise
 }
 
 /**
+ * Get popular posts sorted by like count (most liked first)
+ */
+export async function getPopularPosts(req: AuthRequest, res: Response): Promise<Response> {
+  const page = parseInt(req.query.page as string) || 1;
+  const limit = parseInt(req.query.limit as string) || 10;
+
+  // Fetch all published posts with like counts
+  const posts = await prisma.post.findMany({
+    where: { published: true },
+    include: {
+      author: {
+        select: {
+          id: true,
+          username: true,
+        },
+      },
+      category: {
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+        },
+      },
+      tags: {
+        include: {
+          tag: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      },
+      _count: {
+        select: {
+          likes: true,
+        },
+      },
+    },
+  });
+
+  // Sort by like count (descending), then by createdAt for ties
+  posts.sort((a, b) => {
+    if (b._count.likes !== a._count.likes) {
+      return b._count.likes - a._count.likes;
+    }
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  });
+
+  // Apply pagination
+  const skip = (page - 1) * limit;
+  const paginatedPosts = posts.slice(skip, skip + limit);
+
+  // Transform to match existing response format
+  const postsWithLikes = paginatedPosts.map((post) => {
+    const { _count, ...postWithoutCount } = post;
+    return {
+      ...postWithoutCount,
+      likeCount: _count.likes,
+      tags: post.tags.map((postTag: any) => postTag.tag),
+    };
+  });
+
+  const total = posts.length;
+
+  return res.json({
+    posts: postsWithLikes,
+    pagination: {
+      page,
+      limit,
+      total,
+      pages: Math.ceil(total / limit),
+    },
+  });
+}
+
+/**
  * Get all posts for authenticated user (including unpublished)
  */
 export async function getMyPosts(req: AuthRequest, res: Response): Promise<Response> {

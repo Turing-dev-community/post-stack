@@ -18,6 +18,10 @@ router.get('/trending', validatePagination, handleValidationErrors, cacheMiddlew
   (req: AuthRequest, res: Response) => postsController.getTrendingPosts(req, res)
 ));
 
+router.get('/popular', validatePagination, handleValidationErrors, cacheMiddleware(CACHE_CONFIG.TTL_POSTS_LIST), asyncHandler(
+  (req: AuthRequest, res: Response) => postsController.getPopularPosts(req, res)
+));
+
 // Get all posts for authenticated user (including unpublished)
 router.get('/my-posts', authenticateToken, validatePagination, handleValidationErrors, cacheMiddleware(CACHE_CONFIG.TTL_POSTS_LIST), asyncHandler(
   (req: AuthRequest, res: Response) => postsController.getMyPosts(req, res)
