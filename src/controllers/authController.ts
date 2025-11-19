@@ -98,6 +98,45 @@ export const changePassword = asyncHandler(async (req: AuthRequest, res: Respons
   });
 });
 
+export const reactivateAccount = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { email, password } = req.body;
+
+  const user: User | null = await prisma.user.findUnique({ where: { email } });
+
+  if (!user) {
+    return res.status(401).json({ error: 'Invalid credentials' });
+  }
+
+  // Check if account is actually deactivated
+  if (!user.deletedAt) {
+    return res.status(400).json({
+      error: 'Account is already active',
+      message: 'This account is already active. You can log in normally.',
+    });
+  }
+
+  // Verify password
+  const isPasswordValid = await comparePassword(password, user.password);
+  if (!isPasswordValid) {
+    return res.status(401).json({ error: 'Invalid credentials' });
+  }
+
+  // Reactivate account
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { deletedAt: null },
+  });
+
+  // Generate new token
+  const token = generateToken(user.id);
+
+  return res.json({
+    message: 'Account reactivated successfully',
+    user: { id: user.id, email: user.email, username: user.username },
+    token,
+  });
+});
+
 export const deactivateAccount = asyncHandler(async (req: AuthRequest, res: Response) => {
   if (!req.user) {
     return res.status(401).json({ error: 'Authentication required' });
