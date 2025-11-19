@@ -3,6 +3,7 @@ import { AuthRequest } from '../utils/auth';
 import { generateSlug } from '../utils/auth';
 import { invalidateCache } from '../middleware/cache';
 import { prisma } from '../lib/prisma';
+import { estimateReadingTime } from '../utils/readingTime';
 
 /**
  * Helper function to add like counts to posts
@@ -10,12 +11,11 @@ import { prisma } from '../lib/prisma';
 async function addLikeCountsToPosts(posts: any[]): Promise<any[]> {
   return Promise.all(
     posts.map(async (post) => {
-      const likeCount = await prisma.postLike.count({
-        where: { postId: post.id },
-      });
+      const likeCount = await prisma.postLike.count({ where: { postId: post.id } });
       return {
         ...post,
         likeCount,
+        readingTime: estimateReadingTime(post.content),
         tags: post.tags ? post.tags.map((postTag: any) => postTag.tag) : [],
       };
     })
@@ -179,7 +179,10 @@ export async function getTrendingPosts(req: AuthRequest, res: Response): Promise
   });
 
   return res.json({
-    posts,
+    posts: posts.map((post) => ({
+      ...post,
+      readingTime: estimateReadingTime(post.content),
+    })),
     pagination: {
       page,
       limit,
@@ -304,12 +307,11 @@ export async function getSavedPosts(req: AuthRequest, res: Response): Promise<Re
 
   const postsWithLikes = await Promise.all(
     savedPosts.map(async (savedPost) => {
-      const likeCount = await prisma.postLike.count({
-        where: { postId: savedPost.post.id },
-      });
+      const likeCount = await prisma.postLike.count({ where: { postId: savedPost.post.id } });
       return {
         ...savedPost.post,
         likeCount,
+        readingTime: estimateReadingTime(savedPost.post.content),
         savedAt: savedPost.createdAt,
         tags: savedPost.post.tags.map((postTag: any) => postTag.tag),
       };
@@ -470,6 +472,7 @@ export async function getPostBySlug(req: AuthRequest, res: Response): Promise<Re
   const postWithLikes = {
     ...post,
     likeCount,
+    readingTime: estimateReadingTime(post.content),
     tags: post.tags.map((postTag: any) => postTag.tag),
   };
 
@@ -530,6 +533,7 @@ export async function getDraftBySlug(req: AuthRequest, res: Response): Promise<R
   const postWithLikes = {
     ...post,
     likeCount,
+    readingTime: estimateReadingTime(post.content),
     tags: post.tags.map((postTag: any) => postTag.tag),
   };
 
@@ -607,6 +611,7 @@ export async function createPost(req: AuthRequest, res: Response): Promise<Respo
 
   const postWithTags = {
     ...post,
+    readingTime: estimateReadingTime(post.content),
     tags: post.tags.map((postTag: any) => postTag.tag),
   };
 
@@ -707,6 +712,7 @@ export async function updatePost(req: AuthRequest, res: Response): Promise<Respo
 
   const postWithTags = {
     ...post,
+    readingTime: estimateReadingTime(post.content),
     tags: post.tags.map((postTag: any) => postTag.tag),
   };
 
