@@ -165,3 +165,14 @@ export const validatePasswordChange = [
       return true;
     }),
 ];
+
+export const validateReactivate = [
+  body("email")
+    .trim()
+    .isEmail()
+    .normalizeEmail()
+    .withMessage("Please provide a valid email"),
+  body("password")
+    .notEmpty()
+    .withMessage("Password is required"),
+];
