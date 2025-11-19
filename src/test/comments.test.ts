@@ -238,4 +238,304 @@ describe('Comments API (mocked)', () => {
       expect(res.body).toHaveProperty('likeCount', 0);
     });
   });
+
+  describe('PUT /api/posts/:postId/comments/:commentId', () => {
+    it('should update comment successfully when user owns the comment', async () => {
+      const postId = 'post-1';
+      const commentId = 'comment-1';
+      const userId = 'user-1';
+      const authToken = generateToken(userId);
+      const newContent = 'Updated comment content';
+
+      (prismaMock.post.findUnique as jest.Mock).mockResolvedValue({
+        id: postId,
+        slug: 'test-post',
+      });
+
+      (prismaMock.comment.findUnique as jest.Mock).mockResolvedValue({
+        id: commentId,
+        postId: postId,
+        userId: userId,
+        content: 'Original content',
+      });
+
+      (prismaMock.comment.update as jest.Mock).mockResolvedValue({
+        id: commentId,
+        postId: postId,
+        userId: userId,
+        content: newContent,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        user: {
+          id: userId,
+          username: 'testuser',
+        },
+      });
+
+      (prismaMock.commentLike.count as jest.Mock).mockResolvedValue(5);
+
+      const res = await request(app)
+        .put(`/api/posts/${postId}/comments/${commentId}`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ content: newContent })
+        .expect(200);
+
+      expect(res.body).toHaveProperty('message', 'Comment updated successfully');
+      expect(res.body).toHaveProperty('comment');
+      expect(res.body.comment).toHaveProperty('content', newContent);
+      expect(res.body.comment).toHaveProperty('likeCount', 5);
+    });
+
+    it('should return 401 when not authenticated', async () => {
+      const postId = 'post-1';
+      const commentId = 'comment-1';
+
+      const res = await request(app)
+        .put(`/api/posts/${postId}/comments/${commentId}`)
+        .send({ content: 'Updated content' })
+        .expect(401);
+
+      expect(res.body).toHaveProperty('error', 'Access token required');
+    });
+
+    it('should return 404 when post does not exist', async () => {
+      const postId = 'non-existent-post';
+      const commentId = 'comment-1';
+      const userId = 'user-1';
+      const authToken = generateToken(userId);
+
+      (prismaMock.post.findUnique as jest.Mock).mockResolvedValue(null);
+
+      const res = await request(app)
+        .put(`/api/posts/${postId}/comments/${commentId}`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ content: 'Updated content' })
+        .expect(404);
+
+      expect(res.body).toHaveProperty('error', 'NotFoundError');
+      expect(res.body).toHaveProperty('message', 'Post not found');
+    });
+
+    it('should return 404 when comment does not exist', async () => {
+      const postId = 'post-1';
+      const commentId = 'non-existent-comment';
+      const userId = 'user-1';
+      const authToken = generateToken(userId);
+
+      (prismaMock.post.findUnique as jest.Mock).mockResolvedValue({
+        id: postId,
+        slug: 'test-post',
+      });
+
+      (prismaMock.comment.findUnique as jest.Mock).mockResolvedValue(null);
+
+      const res = await request(app)
+        .put(`/api/posts/${postId}/comments/${commentId}`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ content: 'Updated content' })
+        .expect(404);
+
+      expect(res.body).toHaveProperty('error', 'NotFoundError');
+      expect(res.body).toHaveProperty('message', 'Comment not found');
+    });
+
+    it('should return 403 when user does not own the comment', async () => {
+      const postId = 'post-1';
+      const commentId = 'comment-1';
+      const userId = 'user-1';
+      const otherUserId = 'user-2';
+      const authToken = generateToken(userId);
+
+      (prismaMock.post.findUnique as jest.Mock).mockResolvedValue({
+        id: postId,
+        slug: 'test-post',
+      });
+
+      (prismaMock.comment.findUnique as jest.Mock).mockResolvedValue({
+        id: commentId,
+        postId: postId,
+        userId: otherUserId, // Different user
+        content: 'Original content',
+      });
+
+      const res = await request(app)
+        .put(`/api/posts/${postId}/comments/${commentId}`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ content: 'Updated content' })
+        .expect(403);
+
+      expect(res.body).toHaveProperty('error', 'ForbiddenError');
+      expect(res.body).toHaveProperty('message', 'You can only edit your own comments');
+    });
+
+    it('should return 400 when content is missing', async () => {
+      const postId = 'post-1';
+      const commentId = 'comment-1';
+      const userId = 'user-1';
+      const authToken = generateToken(userId);
+
+      const res = await request(app)
+        .put(`/api/posts/${postId}/comments/${commentId}`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({})
+        .expect(400);
+
+      expect(res.body).toHaveProperty('error', 'ValidationError');
+    });
+
+    it('should return 400 when content is empty', async () => {
+      const postId = 'post-1';
+      const commentId = 'comment-1';
+      const userId = 'user-1';
+      const authToken = generateToken(userId);
+
+      const res = await request(app)
+        .put(`/api/posts/${postId}/comments/${commentId}`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ content: '' })
+        .expect(400);
+
+      expect(res.body).toHaveProperty('error', 'ValidationError');
+    });
+  });
+
+  describe('DELETE /api/posts/:postId/comments/:commentId', () => {
+    it('should delete comment successfully when user owns the comment', async () => {
+      const postId = 'post-1';
+      const commentId = 'comment-1';
+      const userId = 'user-1';
+      const authToken = generateToken(userId);
+
+      (prismaMock.post.findUnique as jest.Mock).mockResolvedValue({
+        id: postId,
+        slug: 'test-post',
+      });
+
+      (prismaMock.comment.findUnique as jest.Mock).mockResolvedValue({
+        id: commentId,
+        postId: postId,
+        userId: userId,
+        content: 'Comment to delete',
+      });
+
+      (prismaMock.comment.delete as jest.Mock).mockResolvedValue({});
+
+      const res = await request(app)
+        .delete(`/api/posts/${postId}/comments/${commentId}`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(200);
+
+      expect(res.body).toHaveProperty('message', 'Comment deleted successfully');
+    });
+
+    it('should return 401 when not authenticated', async () => {
+      const postId = 'post-1';
+      const commentId = 'comment-1';
+
+      const res = await request(app)
+        .delete(`/api/posts/${postId}/comments/${commentId}`)
+        .expect(401);
+
+      expect(res.body).toHaveProperty('error', 'Access token required');
+    });
+
+    it('should return 404 when post does not exist', async () => {
+      const postId = 'non-existent-post';
+      const commentId = 'comment-1';
+      const userId = 'user-1';
+      const authToken = generateToken(userId);
+
+      (prismaMock.post.findUnique as jest.Mock).mockResolvedValue(null);
+
+      const res = await request(app)
+        .delete(`/api/posts/${postId}/comments/${commentId}`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(404);
+
+      expect(res.body).toHaveProperty('error', 'NotFoundError');
+      expect(res.body).toHaveProperty('message', 'Post not found');
+    });
+
+    it('should return 404 when comment does not exist', async () => {
+      const postId = 'post-1';
+      const commentId = 'non-existent-comment';
+      const userId = 'user-1';
+      const authToken = generateToken(userId);
+
+      (prismaMock.post.findUnique as jest.Mock).mockResolvedValue({
+        id: postId,
+        slug: 'test-post',
+      });
+
+      (prismaMock.comment.findUnique as jest.Mock).mockResolvedValue(null);
+
+      const res = await request(app)
+        .delete(`/api/posts/${postId}/comments/${commentId}`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(404);
+
+      expect(res.body).toHaveProperty('error', 'NotFoundError');
+      expect(res.body).toHaveProperty('message', 'Comment not found');
+    });
+
+    it('should return 403 when user does not own the comment', async () => {
+      const postId = 'post-1';
+      const commentId = 'comment-1';
+      const userId = 'user-1';
+      const otherUserId = 'user-2';
+      const authToken = generateToken(userId);
+
+      (prismaMock.post.findUnique as jest.Mock).mockResolvedValue({
+        id: postId,
+        slug: 'test-post',
+      });
+
+      (prismaMock.comment.findUnique as jest.Mock).mockResolvedValue({
+        id: commentId,
+        postId: postId,
+        userId: otherUserId, // Different user
+        content: 'Comment to delete',
+      });
+
+      const res = await request(app)
+        .delete(`/api/posts/${postId}/comments/${commentId}`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(403);
+
+      expect(res.body).toHaveProperty('error', 'ForbiddenError');
+      expect(res.body).toHaveProperty('message', 'You can only delete your own comments');
+    });
+
+    it('should cascade delete nested replies when deleting a comment', async () => {
+      const postId = 'post-1';
+      const commentId = 'comment-1';
+      const userId = 'user-1';
+      const authToken = generateToken(userId);
+
+      (prismaMock.post.findUnique as jest.Mock).mockResolvedValue({
+        id: postId,
+        slug: 'test-post',
+      });
+
+      (prismaMock.comment.findUnique as jest.Mock).mockResolvedValue({
+        id: commentId,
+        postId: postId,
+        userId: userId,
+        content: 'Comment with replies',
+      });
+
+      (prismaMock.comment.delete as jest.Mock).mockResolvedValue({});
+
+      const res = await request(app)
+        .delete(`/api/posts/${postId}/comments/${commentId}`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(200);
+
+      expect(res.body).toHaveProperty('message', 'Comment deleted successfully');
+      // Note: Cascade delete is handled by database, so we just verify the delete was called
+      expect(prismaMock.comment.delete).toHaveBeenCalledWith({
+        where: { id: commentId },
+      });
+    });
+  });
 });
