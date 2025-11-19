@@ -3733,4 +3733,45 @@ describe("Blog Post Routes", () => {
 			expect(data.posts.length).toBe(5); // Should be limited to 5
 		});
 	});
+
+	describe("posts controller tests", () => {
+		it("should export post CRUD controller functions", () => {
+			const postsController = require("../controllers/postsController");
+			expect(postsController.createPost).toBeDefined();
+			expect(postsController.updatePost).toBeDefined();
+			expect(postsController.deletePost).toBeDefined();
+			expect(postsController.getPostBySlug).toBeDefined();
+			expect(postsController.getDraftBySlug).toBeDefined();
+		});
+
+		it("should export post listing controller functions", () => {
+			const postsController = require("../controllers/postsController");
+			expect(postsController.getAllPosts).toBeDefined();
+			expect(postsController.getTrendingPosts).toBeDefined();
+			expect(postsController.getMyPosts).toBeDefined();
+			expect(postsController.getSavedPosts).toBeDefined();
+		});
+
+		it("should export related posts controller function", () => {
+			const postsController = require("../controllers/postsController");
+			expect(postsController.getRelatedPosts).toBeDefined();
+		});
+
+		it("should export post interaction controller functions", () => {
+			const postsController = require("../controllers/postsController");
+			expect(postsController.likePost).toBeDefined();
+			expect(postsController.unlikePost).toBeDefined();
+			expect(postsController.savePost).toBeDefined();
+			expect(postsController.unsavePost).toBeDefined();
+		});
+
+		it("should export comment controller functions", () => {
+			const postsController = require("../controllers/postsController");
+			expect(postsController.getPostComments).toBeDefined();
+			expect(postsController.createComment).toBeDefined();
+			expect(postsController.replyToComment).toBeDefined();
+			expect(postsController.likeComment).toBeDefined();
+			expect(postsController.unlikeComment).toBeDefined();
+		});
+	});
 });
