@@ -1020,7 +1020,6 @@ describe("Blog Post Routes", () => {
 		});
 	});
 
-
 	describe("GET /api/posts/:slug", () => {
 		it("should return published post by slug", async () => {
 			const post = await prisma.post.create({
