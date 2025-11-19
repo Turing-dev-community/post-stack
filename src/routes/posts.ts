@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import { Router, Response } from 'express';
 import { authenticateToken } from '../utils/auth';
 import { validatePost, validateComment, validatePagination } from '../middleware/validators';
 import { handleValidationErrors, asyncHandler } from '../middleware/validation';
@@ -25,31 +25,6 @@ router.get('/my-posts', authenticateToken, validatePagination, handleValidationE
 // Get saved posts for authenticated user
 router.get('/saved', authenticateToken, validatePagination, handleValidationErrors, cacheMiddleware(CACHE_CONFIG.TTL_POSTS_LIST), asyncHandler(
   (req: AuthRequest, res: Response) => postsController.getSavedPosts(req, res)
-));
-
-// Get comments for a post
-router.get('/:postId/comments', asyncHandler(
-  (req: AuthRequest, res: Response) => postsController.getPostComments(req, res)
-));
-
-// Create a comment on a post
-router.post('/:postId/comments', authenticateToken, validateComment, handleValidationErrors, asyncHandler(
-  (req: AuthRequest, res: Response) => postsController.createComment(req, res)
-));
-
-// Reply to a comment
-router.post('/:postId/comments/:commentId/reply', authenticateToken, validateComment, handleValidationErrors, asyncHandler(
-  (req: AuthRequest, res: Response) => postsController.replyToComment(req, res)
-));
-
-// Like a comment
-router.post('/:postId/comments/:commentId/like', authenticateToken, asyncHandler(
-  (req: AuthRequest, res: Response) => postsController.likeComment(req, res)
-));
-
-// Unlike a comment
-router.delete('/:postId/comments/:commentId/like', authenticateToken, asyncHandler(
-  (req: AuthRequest, res: Response) => postsController.unlikeComment(req, res)
 ));
 
 // Get related posts for a post by slug

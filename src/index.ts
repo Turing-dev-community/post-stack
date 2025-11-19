@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import authRoutes from './routes/auth';
 import profileRoutes from './routes/profile';
 import postRoutes from './routes/posts';
+import commentRoutes from './routes/comments';
 import categoryRoutes from './routes/categories';
 import userRoutes from './routes/users';
 import tagRoutes from './routes/tags';
@@ -39,6 +40,7 @@ app.get('/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/posts', postRoutes);
+app.use('/api/posts', commentRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/tags', tagRoutes);
