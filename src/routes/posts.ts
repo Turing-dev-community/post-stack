@@ -6,6 +6,7 @@ import { handleValidationErrors, asyncHandler } from '../middleware/validation';
 import { AuthRequest } from '../utils/auth';
 import { cacheMiddleware, invalidateCache } from '../middleware/cache';
 import { CACHE_CONFIG } from '../constants/cache';
+import { requireAuthor } from '../middleware/authorization';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -936,7 +937,7 @@ router.get('/drafts/:slug', authenticateToken, cacheMiddleware(CACHE_CONFIG.TTL_
 }));
 
 // Create new post
-router.post('/', validatePost, authenticateToken, handleValidationErrors, asyncHandler(async (req: AuthRequest, res: Response) => {
+router.post('/', validatePost, authenticateToken, requireAuthor, handleValidationErrors, asyncHandler(async (req: AuthRequest, res: Response) => {
   if (!req.user) {
     return res.status(401).json({
       error: 'Authentication required',

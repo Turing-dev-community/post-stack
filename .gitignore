@@ -70,3 +70,6 @@ docker-compose.override.yml
 
 # Uploads
 uploads/
+
+# Prisma migrations - ignore all migrations (NOT RECOMMENDED)
+prisma/migrations/

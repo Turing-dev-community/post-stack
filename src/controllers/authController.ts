@@ -1,6 +1,6 @@
 import { Response } from 'express';
 import { asyncHandler } from '../middleware/validation';
-import { AuthRequest, comparePassword, generateToken, hashPassword } from '../utils/auth';
+import { AuthRequest, comparePassword, generateToken, hashPassword, getUserRole } from '../utils/auth';
 import { prisma } from '../lib/prisma';
 import type { User } from '@prisma/client';
 
@@ -26,8 +26,15 @@ export const signup = asyncHandler(async (req: AuthRequest, res: Response) => {
     select: { id: true, email: true, username: true, createdAt: true },
   });
 
+  // Determine user role (default is AUTHOR)
+  const role = await getUserRole(user.id, user.email);
+
   const token = generateToken(user.id);
-  return res.status(201).json({ message: 'User created successfully', user, token });
+  return res.status(201).json({ 
+    message: 'User created successfully', 
+    user: { ...user, role }, 
+    token 
+  });
 });
 
 export const login = asyncHandler(async (req: AuthRequest, res: Response) => {
@@ -51,10 +58,12 @@ export const login = asyncHandler(async (req: AuthRequest, res: Response) => {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
 
+  const role = await getUserRole(user.id, user.email);
+
   const token = generateToken(user.id);
   return res.json({
     message: 'Login successful',
-    user: { id: user.id, email: user.email, username: user.username },
+    user: { id: user.id, email: user.email, username: user.username, role },
     token,
   });
 });
