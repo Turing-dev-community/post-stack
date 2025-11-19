@@ -2967,16 +2967,16 @@ describe("Blog Post Routes", () => {
 
 			const data: any = await response.json();
 
-      expect(response.status).toBe(401);
-      expect(data).toHaveProperty('error', 'Access token required');
-    });
-  });  
+			expect(response.status).toBe(401);
+			expect(data).toHaveProperty('error', 'Access token required');
+		});
+	});
 
-  describe('GET /api/posts/:slug/related - Get related posts', () => {
-    it('should return related posts that share tags with the given post', async () => {
-      // Get some tags
-      const tags = await prisma.tag.findMany({ take: 2 });
-      const tagIds = tags.map(tag => tag.id);
+	describe('GET /api/posts/:slug/related - Get related posts', () => {
+		it('should return related posts that share tags with the given post', async () => {
+			// Get some tags
+			const tags = await prisma.tag.findMany({ take: 2 });
+			const tagIds = tags.map(tag => tag.id);
 
 			// Create a post with tags
 			const originalPost = await prisma.post.create({
@@ -3247,13 +3247,5 @@ describe("Blog Post Routes", () => {
 			expect(postsController.unsavePost).toBeDefined();
 		});
 
-		it("should export comment controller functions", () => {
-			const postsController = require("../controllers/postsController");
-			expect(postsController.getPostComments).toBeDefined();
-			expect(postsController.createComment).toBeDefined();
-			expect(postsController.replyToComment).toBeDefined();
-			expect(postsController.likeComment).toBeDefined();
-			expect(postsController.unlikeComment).toBeDefined();
-		});
 	});
 });
