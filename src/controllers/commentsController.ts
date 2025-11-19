@@ -444,3 +444,83 @@ export const deleteComment = asyncHandler(async (req: AuthRequest, res: Response
     message: 'Comment deleted successfully',
   });
 });
+
+/**
+ * Get recent comments across all posts with pagination
+ */
+export const getRecentComments = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const page = parseInt(req.query.page as string) || 1;
+  const limit = parseInt(req.query.limit as string) || 20;
+  const skip = (page - 1) * limit;
+
+  // Only get top-level comments (no replies) for recent comments
+  const comments = await prisma.comment.findMany({
+    where: {
+      parentId: null, // Only top-level comments
+      post: {
+        published: true, // Only comments on published posts
+      },
+    },
+    include: {
+      user: {
+        select: {
+          id: true,
+          username: true,
+        },
+      },
+      post: {
+        select: {
+          id: true,
+          title: true,
+          slug: true,
+        },
+      },
+    },
+    orderBy: {
+      createdAt: 'desc', // Most recent first
+    },
+    skip,
+    take: limit,
+  });
+
+  // Get like counts for each comment
+  const commentsWithLikes = await Promise.all(
+    comments.map(async (comment: any) => {
+      const likeCount = await prisma.commentLike.count({
+        where: { commentId: comment.id },
+      });
+      return {
+        id: comment.id,
+        content: comment.content,
+        postId: comment.postId,
+        userId: comment.userId,
+        parentId: comment.parentId,
+        createdAt: comment.createdAt,
+        updatedAt: comment.updatedAt,
+        user: comment.user,
+        post: comment.post,
+        likeCount,
+      };
+    })
+  );
+
+  // Get total count for pagination
+  const total = await prisma.comment.count({
+    where: {
+      parentId: null,
+      post: {
+        published: true,
+      },
+    },
+  });
+
+  return res.json({
+    comments: commentsWithLikes,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+    },
+  });
+});
