@@ -579,4 +579,228 @@ describe("Authentication Routes (mocked)", () => {
 			expect(response.body).toHaveProperty("error", "ValidationError");
 		});
 	});
+
+	describe("POST /api/auth/reactivate", () => {
+		it("should reactivate account with valid credentials", async () => {
+			const email = "test@example.com";
+			const password = "Password123";
+			const hashedPassword = await bcrypt.hash(password, 12);
+			const userId = "user-1";
+
+			// Mock user lookup (deactivated account)
+			(prismaMock.user.findUnique as unknown as jest.Mock)
+				.mockResolvedValueOnce({
+					id: userId,
+					email,
+					username: "testuser",
+					password: hashedPassword,
+					deletedAt: new Date(),
+				})
+				// Mock user update
+				.mockResolvedValueOnce({
+					id: userId,
+					email,
+					username: "testuser",
+					deletedAt: null,
+				});
+
+			(prismaMock.user.update as unknown as jest.Mock).mockResolvedValue({
+				id: userId,
+				email,
+				username: "testuser",
+				deletedAt: null,
+			});
+
+			const response = await request(app)
+				.post("/api/auth/reactivate")
+				.send({ email, password })
+				.expect(200);
+
+			expect(response.body).toHaveProperty("message", "Account reactivated successfully");
+			expect(response.body).toHaveProperty("user");
+			expect(response.body.user).toHaveProperty("id", userId);
+			expect(response.body.user).toHaveProperty("email", email);
+			expect(response.body.user).toHaveProperty("username", "testuser");
+			expect(response.body).toHaveProperty("token");
+		});
+
+		it("should return error for invalid email format", async () => {
+			const response = await request(app)
+				.post("/api/auth/reactivate")
+				.send({
+					email: "invalid-email",
+					password: "Password123",
+				})
+				.expect(400);
+
+			expect(response.body).toHaveProperty("error", "ValidationError");
+		});
+
+		it("should return error for missing password", async () => {
+			const response = await request(app)
+				.post("/api/auth/reactivate")
+				.send({
+					email: "test@example.com",
+				})
+				.expect(400);
+
+			expect(response.body).toHaveProperty("error", "ValidationError");
+		});
+
+		it("should return error for wrong password", async () => {
+			const email = "test@example.com";
+			const correctPassword = "Password123";
+			const wrongPassword = "WrongPassword";
+			const hashedPassword = await bcrypt.hash(correctPassword, 12);
+
+			(prismaMock.user.findUnique as unknown as jest.Mock).mockResolvedValue({
+				id: "user-1",
+				email,
+				username: "testuser",
+				password: hashedPassword,
+				deletedAt: new Date(),
+			});
+
+			const response = await request(app)
+				.post("/api/auth/reactivate")
+				.send({ email, password: wrongPassword })
+				.expect(401);
+
+			expect(response.body).toHaveProperty("error", "Invalid credentials");
+		});
+
+		it("should return error if account doesn't exist", async () => {
+			(prismaMock.user.findUnique as unknown as jest.Mock).mockResolvedValue(null);
+
+			const response = await request(app)
+				.post("/api/auth/reactivate")
+				.send({
+					email: "nonexistent@example.com",
+					password: "Password123",
+				})
+				.expect(401);
+
+			expect(response.body).toHaveProperty("error", "Invalid credentials");
+		});
+
+		it("should return error if account is already active", async () => {
+			const email = "test@example.com";
+			const password = "Password123";
+			const hashedPassword = await bcrypt.hash(password, 12);
+
+			(prismaMock.user.findUnique as unknown as jest.Mock).mockResolvedValue({
+				id: "user-1",
+				email,
+				username: "testuser",
+				password: hashedPassword,
+				deletedAt: null, // Account is already active
+			});
+
+			const response = await request(app)
+				.post("/api/auth/reactivate")
+				.send({ email, password })
+				.expect(400);
+
+			expect(response.body).toHaveProperty("error", "Account is already active");
+			expect(response.body).toHaveProperty(
+				"message",
+				"This account is already active. You can log in normally."
+			);
+		});
+
+		it("should allow login after reactivation", async () => {
+			const email = "test@example.com";
+			const password = "Password123";
+			const hashedPassword = await bcrypt.hash(password, 12);
+			const userId = "user-1";
+
+			// Mock reactivation
+			(prismaMock.user.findUnique as unknown as jest.Mock)
+				.mockResolvedValueOnce({
+					id: userId,
+					email,
+					username: "testuser",
+					password: hashedPassword,
+					deletedAt: new Date(),
+				})
+				// Mock login after reactivation
+				.mockResolvedValueOnce({
+					id: userId,
+					email,
+					username: "testuser",
+					password: hashedPassword,
+					deletedAt: null, // Reactivated
+				});
+
+			(prismaMock.user.update as unknown as jest.Mock).mockResolvedValue({
+				id: userId,
+				email,
+				username: "testuser",
+				deletedAt: null,
+			});
+
+			// Reactivate account
+			const reactivateResponse = await request(app)
+				.post("/api/auth/reactivate")
+				.send({ email, password })
+				.expect(200);
+
+			expect(reactivateResponse.body).toHaveProperty("message", "Account reactivated successfully");
+
+			// Try to login
+			const loginResponse = await request(app)
+				.post("/api/auth/login")
+				.send({ email, password })
+				.expect(200);
+
+			expect(loginResponse.body).toHaveProperty("message", "Login successful");
+		});
+
+		it("should allow authentication after reactivation", async () => {
+			const email = "test@example.com";
+			const password = "Password123";
+			const hashedPassword = await bcrypt.hash(password, 12);
+			const userId = "user-1";
+
+			// Mock reactivation
+			(prismaMock.user.findUnique as unknown as jest.Mock)
+				.mockResolvedValueOnce({
+					id: userId,
+					email,
+					username: "testuser",
+					password: hashedPassword,
+					deletedAt: new Date(),
+				})
+				// Mock authentication check
+				.mockResolvedValueOnce({
+					id: userId,
+					email,
+					username: "testuser",
+					deletedAt: null, // Reactivated
+				});
+
+			(prismaMock.user.update as unknown as jest.Mock).mockResolvedValue({
+				id: userId,
+				email,
+				username: "testuser",
+				deletedAt: null,
+			});
+
+			// Reactivate account
+			const reactivateResponse = await request(app)
+				.post("/api/auth/reactivate")
+				.send({ email, password })
+				.expect(200);
+
+			const token = reactivateResponse.body.token;
+
+			// Try to access protected route
+			const profileResponse = await request(app)
+				.get("/api/profile")
+				.set("Authorization", `Bearer ${token}`)
+				.expect(200);
+
+			expect(profileResponse.body).toHaveProperty("user");
+		});
+	});
 });
