@@ -975,3 +975,51 @@ export async function unsavePost(req: AuthRequest, res: Response): Promise<Respo
     message: 'Post unsaved successfully',
   });
 }
+
+export async function updateCommentSettings(req: AuthRequest, res: Response): Promise<Response> {
+  if (!req.user) {
+    return res.status(401).json({
+      error: 'Authentication required',
+    });
+  }
+
+  const { id } = req.params;
+  const { allowComments } = req.body as { allowComments: boolean };
+
+  const post = await prisma.post.findUnique({ where: { id } });
+
+  if (!post) {
+    return res.status(404).json({ error: 'Post not found' });
+  }
+
+  if (post.authorId !== req.user.id) {
+    return res.status(403).json({ error: 'Not authorized to update this post' });
+  }
+
+  const updated = await prisma.post.update({
+    where: { id },
+    data: { allowComments },
+    include: {
+      author: { select: { id: true, username: true } },
+      category: { select: { id: true, name: true, slug: true } },
+      tags: { include: { tag: { select: { id: true, name: true } } } },
+    },
+  });
+
+  invalidateCache.invalidateListCaches();
+  invalidateCache.invalidatePostCache(updated.slug);
+  if (req.user) {
+    invalidateCache.invalidateUserCaches(req.user.id);
+  }
+
+  const postWithTags = {
+    ...updated,
+    readingTime: estimateReadingTime(updated.content),
+    tags: updated.tags.map((postTag: any) => postTag.tag),
+  };
+
+  return res.json({
+    message: 'Comment settings updated successfully',
+    post: postWithTags,
+  });
+}

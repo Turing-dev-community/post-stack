@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { authenticateToken } from '../utils/auth';
-import { validatePost, validateComment, validatePagination } from '../middleware/validators';
+import { validatePost, validateComment, validatePagination, validateCommentSettings } from '../middleware/validators';
 import { handleValidationErrors, asyncHandler } from '../middleware/validation';
 import { AuthRequest } from '../utils/auth';
 import { cacheMiddleware } from '../middleware/cache';
@@ -74,6 +74,11 @@ router.post('/:id/save', authenticateToken, asyncHandler(
 // Unsave a post
 router.delete('/:id/save', authenticateToken, asyncHandler(
   (req: AuthRequest, res: Response) => postsController.unsavePost(req, res)
+));
+
+// Update comment settings (enable/disable comments)
+router.patch('/:id/comments/settings', authenticateToken, validateCommentSettings, handleValidationErrors, asyncHandler(
+  (req: AuthRequest, res: Response) => postsController.updateCommentSettings(req, res)
 ));
 
 export default router;
