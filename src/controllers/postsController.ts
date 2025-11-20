@@ -3,6 +3,7 @@ import { AuthRequest } from '../utils/auth';
 import { generateSlug } from '../utils/auth';
 import { invalidateCache } from '../middleware/cache';
 import { prisma } from '../lib/prisma';
+import { estimateReadingTime } from '../utils/readingTime';
 
 /**
  * Helper function to add like counts to posts
@@ -10,12 +11,11 @@ import { prisma } from '../lib/prisma';
 async function addLikeCountsToPosts(posts: any[]): Promise<any[]> {
   return Promise.all(
     posts.map(async (post) => {
-      const likeCount = await prisma.postLike.count({
-        where: { postId: post.id },
-      });
+      const likeCount = await prisma.postLike.count({ where: { postId: post.id } });
       return {
         ...post,
         likeCount,
+        readingTime: estimateReadingTime(post.content),
         tags: post.tags ? post.tags.map((postTag: any) => postTag.tag) : [],
       };
     })
@@ -254,7 +254,10 @@ export async function getTrendingPosts(req: AuthRequest, res: Response): Promise
   });
 
   return res.json({
-    posts,
+    posts: posts.map((post) => ({
+      ...post,
+      readingTime: estimateReadingTime(post.content),
+    })),
     pagination: {
       page,
       limit,
@@ -379,12 +382,11 @@ export async function getSavedPosts(req: AuthRequest, res: Response): Promise<Re
 
   const postsWithLikes = await Promise.all(
     savedPosts.map(async (savedPost) => {
-      const likeCount = await prisma.postLike.count({
-        where: { postId: savedPost.post.id },
-      });
+      const likeCount = await prisma.postLike.count({ where: { postId: savedPost.post.id } });
       return {
         ...savedPost.post,
         likeCount,
+        readingTime: estimateReadingTime(savedPost.post.content),
         savedAt: savedPost.createdAt,
         tags: savedPost.post.tags.map((postTag: any) => postTag.tag),
       };
@@ -545,6 +547,7 @@ export async function getPostBySlug(req: AuthRequest, res: Response): Promise<Re
   const postWithLikes = {
     ...post,
     likeCount,
+    readingTime: estimateReadingTime(post.content),
     tags: post.tags.map((postTag: any) => postTag.tag),
   };
 
@@ -605,6 +608,7 @@ export async function getDraftBySlug(req: AuthRequest, res: Response): Promise<R
   const postWithLikes = {
     ...post,
     likeCount,
+    readingTime: estimateReadingTime(post.content),
     tags: post.tags.map((postTag: any) => postTag.tag),
   };
 
@@ -682,6 +686,7 @@ export async function createPost(req: AuthRequest, res: Response): Promise<Respo
 
   const postWithTags = {
     ...post,
+    readingTime: estimateReadingTime(post.content),
     tags: post.tags.map((postTag: any) => postTag.tag),
   };
 
@@ -782,6 +787,7 @@ export async function updatePost(req: AuthRequest, res: Response): Promise<Respo
 
   const postWithTags = {
     ...post,
+    readingTime: estimateReadingTime(post.content),
     tags: post.tags.map((postTag: any) => postTag.tag),
   };
 
@@ -1045,3 +1051,50 @@ export async function unsavePost(req: AuthRequest, res: Response): Promise<Respo
   });
 }
 
+export async function updateCommentSettings(req: AuthRequest, res: Response): Promise<Response> {
+  if (!req.user) {
+    return res.status(401).json({
+      error: 'Authentication required',
+    });
+  }
+
+  const { id } = req.params;
+  const { allowComments } = req.body as { allowComments: boolean };
+
+  const post = await prisma.post.findUnique({ where: { id } });
+
+  if (!post) {
+    return res.status(404).json({ error: 'Post not found' });
+  }
+
+  if (post.authorId !== req.user.id) {
+    return res.status(403).json({ error: 'Not authorized to update this post' });
+  }
+
+  const updated = await prisma.post.update({
+    where: { id },
+    data: { allowComments },
+    include: {
+      author: { select: { id: true, username: true } },
+      category: { select: { id: true, name: true, slug: true } },
+      tags: { include: { tag: { select: { id: true, name: true } } } },
+    },
+  });
+
+  invalidateCache.invalidateListCaches();
+  invalidateCache.invalidatePostCache(updated.slug);
+  if (req.user) {
+    invalidateCache.invalidateUserCaches(req.user.id);
+  }
+
+  const postWithTags = {
+    ...updated,
+    readingTime: estimateReadingTime(updated.content),
+    tags: updated.tags.map((postTag: any) => postTag.tag),
+  };
+
+  return res.json({
+    message: 'Comment settings updated successfully',
+    post: postWithTags,
+  });
+}

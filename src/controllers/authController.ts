@@ -1,6 +1,6 @@
 import { Response } from 'express';
 import { asyncHandler } from '../middleware/validation';
-import { AuthRequest, comparePassword, generateToken, hashPassword } from '../utils/auth';
+import { AuthRequest, comparePassword, generateToken, hashPassword, getUserRole } from '../utils/auth';
 import { prisma } from '../lib/prisma';
 import type { User } from '@prisma/client';
 
@@ -26,8 +26,15 @@ export const signup = asyncHandler(async (req: AuthRequest, res: Response) => {
     select: { id: true, email: true, username: true, createdAt: true },
   });
 
+  // Determine user role (default is AUTHOR)
+  const role = await getUserRole(user.id, user.email);
+
   const token = generateToken(user.id);
-  return res.status(201).json({ message: 'User created successfully', user, token });
+  return res.status(201).json({ 
+    message: 'User created successfully', 
+    user: { ...user, role }, 
+    token 
+  });
 });
 
 export const login = asyncHandler(async (req: AuthRequest, res: Response) => {
@@ -51,10 +58,12 @@ export const login = asyncHandler(async (req: AuthRequest, res: Response) => {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
 
+  const role = await getUserRole(user.id, user.email);
+
   const token = generateToken(user.id);
   return res.json({
     message: 'Login successful',
-    user: { id: user.id, email: user.email, username: user.username },
+    user: { id: user.id, email: user.email, username: user.username, role },
     token,
   });
 });
@@ -95,6 +104,45 @@ export const changePassword = asyncHandler(async (req: AuthRequest, res: Respons
 
   return res.json({
     message: 'Password changed successfully',
+  });
+});
+
+export const reactivateAccount = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { email, password } = req.body;
+
+  const user: User | null = await prisma.user.findUnique({ where: { email } });
+
+  if (!user) {
+    return res.status(401).json({ error: 'Invalid credentials' });
+  }
+
+  // Check if account is actually deactivated
+  if (!user.deletedAt) {
+    return res.status(400).json({
+      error: 'Account is already active',
+      message: 'This account is already active. You can log in normally.',
+    });
+  }
+
+  // Verify password
+  const isPasswordValid = await comparePassword(password, user.password);
+  if (!isPasswordValid) {
+    return res.status(401).json({ error: 'Invalid credentials' });
+  }
+
+  // Reactivate account
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { deletedAt: null },
+  });
+
+  // Generate new token
+  const token = generateToken(user.id);
+
+  return res.json({
+    message: 'Account reactivated successfully',
+    user: { id: user.id, email: user.email, username: user.username },
+    token,
   });
 });
 

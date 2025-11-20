@@ -1,11 +1,13 @@
 import { Router, Response } from 'express';
 import { authenticateToken } from '../utils/auth';
-import { validatePost, validateComment, validatePagination } from '../middleware/validators';
+import { validatePost, validateComment, validatePagination, validateCommentSettings } from '../middleware/validators';
 import { handleValidationErrors, asyncHandler } from '../middleware/validation';
 import { AuthRequest } from '../utils/auth';
 import { cacheMiddleware } from '../middleware/cache';
 import { CACHE_CONFIG } from '../constants/cache';
 import * as postsController from '../controllers/postsController';
+import { getRecentComments } from '../controllers/commentsController';
+import { requireAuthor } from '../middleware/authorization';
 
 const router = Router();
 
@@ -27,6 +29,9 @@ router.get('/saved', authenticateToken, validatePagination, handleValidationErro
   (req: AuthRequest, res: Response) => postsController.getSavedPosts(req, res)
 ));
 
+// Get recent comments across all posts
+router.get('/recent-comments', validatePagination, handleValidationErrors, cacheMiddleware(CACHE_CONFIG.TTL_COMMENTS_RECENT), getRecentComments);
+
 // Get related posts for a post by slug
 router.get('/:slug/related', cacheMiddleware(CACHE_CONFIG.TTL_POSTS_LIST), asyncHandler(
   (req: AuthRequest, res: Response) => postsController.getRelatedPosts(req, res)
@@ -42,7 +47,7 @@ router.get('/drafts/:slug', authenticateToken, cacheMiddleware(CACHE_CONFIG.TTL_
 ));
 
 // Create new post
-router.post('/', validatePost, authenticateToken, handleValidationErrors, asyncHandler(
+router.post('/', validatePost, authenticateToken, requireAuthor, handleValidationErrors, asyncHandler(
   (req: AuthRequest, res: Response) => postsController.createPost(req, res)
 ));
 
@@ -74,6 +79,11 @@ router.post('/:id/save', authenticateToken, asyncHandler(
 // Unsave a post
 router.delete('/:id/save', authenticateToken, asyncHandler(
   (req: AuthRequest, res: Response) => postsController.unsavePost(req, res)
+));
+
+// Update comment settings (enable/disable comments)
+router.patch('/:id/comments/settings', authenticateToken, validateCommentSettings, handleValidationErrors, asyncHandler(
+  (req: AuthRequest, res: Response) => postsController.updateCommentSettings(req, res)
 ));
 
 export default router;

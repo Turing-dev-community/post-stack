@@ -121,6 +121,12 @@ export const validateComment = [
     .withMessage("Comment content must be between 1 and 5000 characters"),
 ];
 
+export const validateCommentSettings = [
+  body("allowComments")
+    .isBoolean()
+    .withMessage("allowComments must be a boolean"),
+];
+
 export const validateProfileUpdate = [
   body("profilePicture")
     .optional({ nullable: true })
@@ -164,4 +170,15 @@ export const validatePasswordChange = [
       }
       return true;
     }),
+];
+
+export const validateReactivate = [
+  body("email")
+    .trim()
+    .isEmail()
+    .normalizeEmail()
+    .withMessage("Please provide a valid email"),
+  body("password")
+    .notEmpty()
+    .withMessage("Password is required"),
 ];
