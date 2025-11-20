@@ -6,7 +6,7 @@ import { AuthRequest } from '../utils/auth';
 import { cacheMiddleware } from '../middleware/cache';
 import { CACHE_CONFIG } from '../constants/cache';
 import * as postsController from '../controllers/postsController';
-import { requireAuthor } from '@/middleware/authorization';
+import { requireAuthor } from '../middleware/authorization';
 
 const router = Router();
 
