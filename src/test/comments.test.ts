@@ -127,9 +127,9 @@ describe('Comments API (mocked)', () => {
 
       (prismaMock.comment.findUnique as jest.Mock).mockResolvedValueOnce({ id: deepId, postId });
 
-      const chain = [1,2,3,4,5];
+      const chain = [1, 2, 3, 4, 5];
       for (let i = 0; i < chain.length; i++) {
-        (prismaMock.comment.findUnique as jest.Mock).mockResolvedValueOnce({ id: `c${i}`, parentId: `c${i+1}` });
+        (prismaMock.comment.findUnique as jest.Mock).mockResolvedValueOnce({ id: `c${i}`, parentId: `c${i + 1}` });
       }
       (prismaMock.comment.findUnique as jest.Mock).mockResolvedValueOnce({ id: 'c5', parentId: null });
 
@@ -803,4 +803,57 @@ describe('Comments API (mocked)', () => {
       expect(res.body).toHaveProperty('error');
     });
   });
-});
+
+  describe('PATCH /api/posts/:id/comments/settings', () => {
+    it('allows the author to disable comments and blocks creation after', async () => {
+      (prismaMock.post.findUnique as jest.Mock).mockResolvedValueOnce({ id: 'p1', slug: 's', authorId: userId });
+      (prismaMock.post.update as jest.Mock).mockResolvedValue({
+        id: 'p1',
+        slug: 's',
+        allowComments: false,
+        title: 't',
+        content: 'c',
+        published: true,
+        featured: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        authorId: userId,
+        categoryId: null,
+        metaDescription: null,
+        metaTitle: null,
+        ogImage: null,
+        viewCount: 0,
+        author: { id: userId, username: 'testuser' },
+        category: null,
+        tags: [],
+      });
+
+      const toggleRes = await request(app)
+        .patch('/api/posts/p1/comments/settings')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ allowComments: false })
+        .expect(200);
+
+      expect(toggleRes.body).toHaveProperty('message', 'Comment settings updated successfully');
+      expect(toggleRes.body.post.allowComments).toBe(false);
+
+      (prismaMock.post.findUnique as jest.Mock).mockResolvedValueOnce({ id: 'p1', slug: 's', allowComments: false });
+      const createRes = await request(app)
+        .post('/api/posts/p1/comments')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ content: 'Hello' })
+        .expect(403);
+      expect(createRes.body).toHaveProperty('error', 'Comments are disabled for this post');
+    });
+
+    it('forbids non-owner from toggling comment settings', async () => {
+      (prismaMock.post.findUnique as jest.Mock).mockResolvedValue({ id: 'p1', slug: 's', authorId: 'other' });
+      const res = await request(app)
+        .patch('/api/posts/p1/comments/settings')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ allowComments: false })
+        .expect(403);
+      expect(res.body).toHaveProperty('error', 'Not authorized to update this post');
+    });
+  });
+})  

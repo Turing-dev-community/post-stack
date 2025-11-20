@@ -79,6 +79,12 @@ export const getCommentsForPost = asyncHandler(async (req: AuthRequest, res: Res
     });
   }
 
+  if (post.allowComments === false) {
+    return res.status(403).json({
+      error: 'Comments are disabled for this post',
+    });
+  }
+
   const comments = await prisma.comment.findMany({
     where: { postId, parentId: null },
     include: {
@@ -134,6 +140,12 @@ export const createComment = asyncHandler(async (req: AuthRequest, res: Response
   if (!post) {
     return res.status(404).json({
       error: 'Post not found',
+    });
+  }
+
+  if (post.allowComments === false) {
+    return res.status(403).json({
+      error: 'Comments are disabled for this post',
     });
   }
 
