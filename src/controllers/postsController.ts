@@ -268,6 +268,111 @@ export async function getTrendingPosts(req: AuthRequest, res: Response): Promise
 }
 
 /**
+ * Get popular posts sorted by like count (most liked first)
+ * Uses database-level sorting and pagination for efficiency
+ */
+export async function getPopularPosts(req: AuthRequest, res: Response): Promise<Response> {
+  const page = parseInt(req.query.page as string) || 1;
+  const limit = parseInt(req.query.limit as string) || 10;
+  const skip = (page - 1) * limit;
+
+  // Step 1: Get sorted post IDs with like counts (database-level sorting and pagination)
+  const postIdsWithLikes = await prisma.$queryRaw<Array<{id: string, likeCount: number}>>`
+    SELECT 
+      p.id,
+      COUNT(pl.id)::int as "likeCount"
+    FROM posts p
+    LEFT JOIN post_likes pl ON pl."postId" = p.id
+    WHERE p.published = true
+    GROUP BY p.id, p."createdAt"
+    ORDER BY "likeCount" DESC, p."createdAt" DESC
+    LIMIT ${limit} OFFSET ${skip}
+  `;
+
+  // Step 2: Get total count
+  const totalResult = await prisma.$queryRaw<Array<{count: bigint}>>`
+    SELECT COUNT(*)::bigint as count
+    FROM posts p
+    WHERE p.published = true
+  `;
+  const total = Number(totalResult[0].count);
+
+  // Step 3: If no posts, return empty result
+  if (postIdsWithLikes.length === 0) {
+    return res.json({
+      posts: [],
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+      },
+    });
+  }
+
+  // Step 4: Fetch full post data with relations using Prisma
+  const postIds = postIdsWithLikes.map(p => p.id);
+  const posts = await prisma.post.findMany({
+    where: {
+      id: { in: postIds },
+      published: true,
+    },
+    include: {
+      author: {
+        select: {
+          id: true,
+          username: true,
+        },
+      },
+      category: {
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+        },
+      },
+      tags: {
+        include: {
+          tag: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  // Step 5: Sort posts to match SQL query order and add like counts
+  const likeCountMap = new Map(postIdsWithLikes.map(p => [p.id, p.likeCount]));
+  posts.sort((a, b) => {
+    const indexA = postIds.indexOf(a.id);
+    const indexB = postIds.indexOf(b.id);
+    return indexA - indexB;
+  });
+
+  // Step 6: Transform to match existing response format
+  const postsWithLikes = posts.map((post) => ({
+    ...post,
+    likeCount: likeCountMap.get(post.id) || 0,
+    tags: post.tags.map((postTag: any) => postTag.tag),
+  }));
+
+  return res.json({
+    posts: postsWithLikes,
+    pagination: {
+      page,
+      limit,
+      total,
+      pages: Math.ceil(total / limit),
+    },
+  });
+}
+
+
+
+/**
  * Get all posts for authenticated user (including unpublished)
  */
 export async function getMyPosts(req: AuthRequest, res: Response): Promise<Response> {
