@@ -3230,6 +3230,7 @@ describe("Blog Post Routes", () => {
 			const postsController = require("../controllers/postsController");
 			expect(postsController.getAllPosts).toBeDefined();
 			expect(postsController.getTrendingPosts).toBeDefined();
+			expect(postsController.getPopularPosts).toBeDefined();
 			expect(postsController.getMyPosts).toBeDefined();
 			expect(postsController.getSavedPosts).toBeDefined();
 		});
