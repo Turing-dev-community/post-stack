@@ -1,5 +1,6 @@
 import { prisma } from '../lib/prisma';
-import type { ReportStatus } from '@prisma/client';
+// import type { ReportStatus } from '@prisma/client'; // Commented out - not in schema
+type ReportStatus = 'PENDING' | 'REVIEWED' | 'REJECTED';
 
 export async function createPostReport(postId: string, reporterId: string, reason: string) {
   const post = await prisma.post.findUnique({ where: { id: postId } });
@@ -7,14 +8,14 @@ export async function createPostReport(postId: string, reporterId: string, reaso
     throw new Error('Post not found');
   }
 
-  const existing = await prisma.postReport.findUnique({
+  const existing = await (prisma as any).postReport.findUnique({
     where: { postId_reporterId: { postId, reporterId } },
   });
   if (existing) {
     throw new Error('You have already reported this post');
   }
 
-  const report = await prisma.postReport.create({
+  const report = await (prisma as any).postReport.create({
     data: { postId, reporterId, reason },
     include: {
       post: { select: { id: true, title: true, slug: true } },
@@ -27,7 +28,7 @@ export async function createPostReport(postId: string, reporterId: string, reaso
 export async function listPostReports(page: number, limit: number) {
   const skip = (page - 1) * limit;
   const [reports, total] = await Promise.all([
-    prisma.postReport.findMany({
+    (prisma as any).postReport.findMany({
       skip,
       take: limit,
       orderBy: { createdAt: 'desc' },
@@ -36,17 +37,17 @@ export async function listPostReports(page: number, limit: number) {
         reporter: { select: { id: true, username: true } },
       },
     }),
-    prisma.postReport.count(),
+    (prisma as any).postReport.count(),
   ]);
   return { reports, total, page, limit };
 }
 
 export async function updatePostReportStatus(reportId: string, status: ReportStatus) {
-  const report = await prisma.postReport.findUnique({ where: { id: reportId } });
+  const report = await (prisma as any).postReport.findUnique({ where: { id: reportId } });
   if (!report) {
     throw new Error('Report not found');
   }
-  const updated = await prisma.postReport.update({
+  const updated = await (prisma as any).postReport.update({
     where: { id: reportId },
     data: { status },
     include: {

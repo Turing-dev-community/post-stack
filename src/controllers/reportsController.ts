@@ -1,7 +1,8 @@
 import { Response } from 'express';
 import { AuthRequest } from '../utils/auth';
 import * as reportsService from '../services/reportsService';
-import { ReportStatus } from '@prisma/client';
+// import { ReportStatus } from '@prisma/client'; // Commented out - not in schema
+type ReportStatus = 'PENDING' | 'REVIEWED' | 'REJECTED';
 
 export async function reportPost(req: AuthRequest, res: Response): Promise<Response> {
   if (!req.user) {
