@@ -4,7 +4,6 @@ import { generateSlug } from '../utils/auth';
 import { invalidateCache } from '../middleware/cache';
 import { prisma } from '../lib/prisma';
 import { estimateReadingTime } from '../utils/readingTime';
-import { Prisma } from '@prisma/client';
 
 /**
  * Helper function to add like counts to posts
@@ -997,36 +996,26 @@ export async function updateCommentSettings(req: AuthRequest, res: Response): Pr
     return res.status(403).json({ error: 'Not authorized to update this post' });
   }
 
-  type PostWithRelations = Prisma.PostGetPayload<{
-    include: {
-      author: { select: { id: true; username: true } };
-      category: { select: { id: true; name: true; slug: true } };
-      tags: { include: { tag: { select: { id: true; name: true } } } };
-    };
-  }>;
-
-  const updatedPost = await prisma.post.update({
+  const updated = await prisma.post.update({
     where: { id },
-    data: {
-      allowComments: Boolean(allowComments),
-    } as Prisma.PostUncheckedUpdateInput & { allowComments: boolean },
+    data: { allowComments },
     include: {
       author: { select: { id: true, username: true } },
       category: { select: { id: true, name: true, slug: true } },
       tags: { include: { tag: { select: { id: true, name: true } } } },
     },
-  }) as PostWithRelations;
+  });
 
   invalidateCache.invalidateListCaches();
-  invalidateCache.invalidatePostCache(updatedPost.slug);
+  invalidateCache.invalidatePostCache(updated.slug);
   if (req.user) {
     invalidateCache.invalidateUserCaches(req.user.id);
   }
 
   const postWithTags = {
-    ...updatedPost,
-    readingTime: estimateReadingTime(updatedPost.content),
-    tags: updatedPost.tags.map((postTag) => postTag.tag),
+    ...updated,
+    readingTime: estimateReadingTime(updated.content),
+    tags: updated.tags.map((postTag: any) => postTag.tag),
   };
 
   return res.json({
