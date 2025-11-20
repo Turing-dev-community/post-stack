@@ -1,6 +1,6 @@
 import { Response } from 'express';
 import { AuthRequest } from '../utils/auth';
-import { generateSlug } from '../utils/auth';
+import { generateSlug, generateUniquePostSlug } from '../utils/slugUtils';
 import { invalidateCache } from '../middleware/cache';
 import { prisma } from '../lib/prisma';
 import { estimateReadingTime } from '../utils/readingTime';
@@ -859,7 +859,7 @@ export async function updatePost(req: AuthRequest, res: Response): Promise<Respo
 
   let slug = existingPost.slug;
   if (title !== existingPost.title) {
-    slug = generateSlug(title);
+    slug = await generateUniquePostSlug(title, id);
   }
 
   const post = await prisma.$transaction(async (tx) => {
