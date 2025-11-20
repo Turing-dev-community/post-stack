@@ -31,6 +31,9 @@ async function getNestedReplies(postId: string, parentId: string, currentDepth: 
     where: {
       parentId: parentId,
       postId: postId,
+      user: {
+        deletedAt: null, // Filter out comments from deactivated users
+      },
     },
     include: {
       user: {
@@ -86,7 +89,13 @@ export const getCommentsForPost = asyncHandler(async (req: AuthRequest, res: Res
   }
 
   const comments = await prisma.comment.findMany({
-    where: { postId, parentId: null },
+    where: { 
+      postId, 
+      parentId: null,
+      user: {
+        deletedAt: null, // Filter out comments from deactivated users
+      },
+    },
     include: {
       user: {
         select: {
@@ -469,6 +478,9 @@ export const getRecentComments = asyncHandler(async (req: AuthRequest, res: Resp
   const comments = await prisma.comment.findMany({
     where: {
       parentId: null, // Only top-level comments
+      user: {
+        deletedAt: null, // Filter out comments from deactivated users
+      },
       post: {
         published: true, // Only comments on published posts
       },
@@ -520,6 +532,9 @@ export const getRecentComments = asyncHandler(async (req: AuthRequest, res: Resp
   const total = await prisma.comment.count({
     where: {
       parentId: null,
+      user: {
+        deletedAt: null, // Filter out comments from deactivated users
+      },
       post: {
         published: true,
       },
