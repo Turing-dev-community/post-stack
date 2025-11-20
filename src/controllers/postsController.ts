@@ -31,6 +31,9 @@ export async function getAllPosts(req: AuthRequest, res: Response): Promise<Resp
   const titleQuery = req.query.title as string;
   const authorIdQuery = req.query.authorId as string;
   const categoryIdQuery = req.query.categoryId as string;
+  const tagNameQuery = req.query.tag as string;
+  const fromDateQuery = req.query.fromDate as string;
+  const toDateQuery = req.query.toDate as string;
   const sortBy = (req.query.sortBy as string) || 'createdAt';
   const sortOrder = (req.query.sortOrder as string) || 'desc';
   const skip = (page - 1) * limit;
@@ -55,6 +58,36 @@ export async function getAllPosts(req: AuthRequest, res: Response): Promise<Resp
     });
   }
 
+  // Validate date format if provided
+  if (fromDateQuery) {
+    const fromDate = new Date(fromDateQuery);
+    if (isNaN(fromDate.getTime())) {
+      return res.status(400).json({
+        error: 'Invalid fromDate format. Use ISO 8601 format (e.g., YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss)',
+      });
+    }
+  }
+
+  if (toDateQuery) {
+    const toDate = new Date(toDateQuery);
+    if (isNaN(toDate.getTime())) {
+      return res.status(400).json({
+        error: 'Invalid toDate format. Use ISO 8601 format (e.g., YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss)',
+      });
+    }
+  }
+
+  // Validate date range
+  if (fromDateQuery && toDateQuery) {
+    const fromDate = new Date(fromDateQuery);
+    const toDate = new Date(toDateQuery);
+    if (fromDate > toDate) {
+      return res.status(400).json({
+        error: 'fromDate must be earlier than or equal to toDate',
+      });
+    }
+  }
+
   const whereClause: any = { published: true };
 
   if (titleQuery && titleQuery.trim()) {
@@ -70,6 +103,48 @@ export async function getAllPosts(req: AuthRequest, res: Response): Promise<Resp
 
   if (categoryIdQuery) {
     whereClause.categoryId = categoryIdQuery;
+  }
+
+  // Filter by tag name
+  if (tagNameQuery && tagNameQuery.trim()) {
+    const tag = await prisma.tag.findFirst({
+      where: {
+        name: {
+          equals: tagNameQuery.trim(),
+          mode: 'insensitive',
+        },
+      },
+    });
+
+    if (tag) {
+      whereClause.tags = {
+        some: {
+          tagId: tag.id,
+        },
+      };
+    } else {
+      // Tag doesn't exist, return empty results by using non-existent tag ID
+      whereClause.tags = {
+        some: {
+          tagId: 'non-existent-tag-id',
+        },
+      };
+    }
+  }
+
+  // Filter by date range
+  if (fromDateQuery || toDateQuery) {
+    whereClause.createdAt = {};
+    
+    if (fromDateQuery) {
+      const fromDate = new Date(fromDateQuery);
+      whereClause.createdAt.gte = fromDate;
+    }
+    
+    if (toDateQuery) {
+      const toDate = new Date(toDateQuery);
+      whereClause.createdAt.lte = toDate;
+    }
   }
 
   const orderBy: any[] = [
