@@ -226,5 +226,12 @@ describe('Categories API', () => {
       expect(Array.isArray(response1.body.categories)).toBe(true);
       expect(Array.isArray(response2.body.categories)).toBe(true);
     });
+
+
+    // test by dynamically importing the controller
+    it('should dynamically import the controller', async () => {
+      const controller = await import('../controllers/categoriesController');
+      expect(controller.getAllCategories).toBeDefined();
+    });
   });
 });
