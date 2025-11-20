@@ -7,7 +7,7 @@ import { invalidateCache } from '../middleware/cache';
 
 const { prisma: prismaMock } = setupPrismaMock(prisma, app);
 
-describe('Posts Deactivated User Filtering (mocked)', () => {
+describe('Posts Controller - Deactivated User Filtering (mocked)', () => {
   const activeUserId = 'active-user-1';
   const deactivatedUserId = 'deactivated-user-1';
   const activeUser2Id = 'active-user-2';
