@@ -1,5 +1,5 @@
 import { prisma } from "../../lib/prisma";
-import { generateSlug } from "../../utils/auth";
+import { generateSlug, generateUniquePostSlug } from "../../utils/slugUtils";
 import { invalidateCache } from "../../middleware/cache";
 import {
 	enrichPostWithMetadata,
@@ -73,7 +73,7 @@ export async function updatePost(
 
 	let slug = existingPost.slug;
 	if (data.title && data.title !== existingPost.title) {
-		slug = generateSlug(data.title);
+		slug = await generateUniquePostSlug(data.title, existingPost.id);
 	}
 
 	const post = await prisma.$transaction(async (tx) => {
@@ -142,4 +142,3 @@ export async function deletePost(postId: string, userId: string) {
 	invalidateCache.invalidatePostCache(existingPost.slug);
 	invalidateCache.invalidateUserCaches(userId);
 }
-
