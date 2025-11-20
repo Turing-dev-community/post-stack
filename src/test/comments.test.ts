@@ -3,11 +3,13 @@ import { setupPrismaMock } from './utils/mockPrisma';
 import { prisma } from '../lib/prisma';
 import app from '../index';
 import { generateToken } from '../utils/auth';
+import { invalidateCache } from '../middleware/cache';
 
 const { prisma: prismaMock } = setupPrismaMock(prisma, app);
 
 describe('Comments API (mocked)', () => {
   const userId = 'user-1';
+  const userId2 = 'user-2';
   const authToken = (() => {
     process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret';
     return generateToken(userId);
@@ -125,9 +127,9 @@ describe('Comments API (mocked)', () => {
 
       (prismaMock.comment.findUnique as jest.Mock).mockResolvedValueOnce({ id: deepId, postId });
 
-      const chain = [1,2,3,4,5];
+      const chain = [1, 2, 3, 4, 5];
       for (let i = 0; i < chain.length; i++) {
-        (prismaMock.comment.findUnique as jest.Mock).mockResolvedValueOnce({ id: `c${i}`, parentId: `c${i+1}` });
+        (prismaMock.comment.findUnique as jest.Mock).mockResolvedValueOnce({ id: `c${i}`, parentId: `c${i + 1}` });
       }
       (prismaMock.comment.findUnique as jest.Mock).mockResolvedValueOnce({ id: 'c5', parentId: null });
 
@@ -539,6 +541,269 @@ describe('Comments API (mocked)', () => {
     });
   });
 
+  describe('GET /api/posts/recent-comments - Get recent comments', () => {
+    beforeEach(() => {
+      // Clear cache before each test to ensure fresh data
+      invalidateCache.invalidateAll();
+    });
+
+    const createMockComment = (id: string, postId: string, userId: string, createdAt: Date, content: string = 'Test comment') => ({
+      id,
+      content,
+      postId,
+      userId,
+      parentId: null,
+      createdAt,
+      updatedAt: createdAt,
+      user: {
+        id: userId,
+        username: userId === 'user-1' ? 'testuser' : 'testuser2',
+      },
+      post: {
+        id: postId,
+        title: `Post ${postId}`,
+        slug: `post-${postId}`,
+      },
+    });
+
+    it('should return recent comments with pagination', async () => {
+      const now = new Date();
+      const comment1 = createMockComment('comment-1', 'post-1', userId, new Date(now.getTime() - 1000));
+      const comment2 = createMockComment('comment-2', 'post-2', userId2, new Date(now.getTime() - 2000));
+
+      (prismaMock.comment.findMany as jest.Mock).mockClear().mockResolvedValue([comment1, comment2]);
+      (prismaMock.commentLike.count as jest.Mock).mockClear()
+        .mockResolvedValueOnce(5) // comment1 likes
+        .mockResolvedValueOnce(3); // comment2 likes
+      (prismaMock.comment.count as jest.Mock).mockClear().mockResolvedValue(2);
+
+      const res = await request(app)
+        .get('/api/posts/recent-comments')
+        .expect(200);
+
+      expect(res.body).toHaveProperty('comments');
+      expect(res.body).toHaveProperty('pagination');
+      expect(res.body.comments).toHaveLength(2);
+      expect(res.body.comments[0]).toHaveProperty('id', 'comment-1');
+      expect(res.body.comments[0]).toHaveProperty('likeCount', 5);
+      expect(res.body.comments[0]).toHaveProperty('user');
+      expect(res.body.comments[0]).toHaveProperty('post');
+      expect(res.body.pagination).toMatchObject({
+        page: 1,
+        limit: 20,
+        total: 2,
+        totalPages: 1,
+      });
+    });
+
+    it('should return only top-level comments (no replies)', async () => {
+      const now = new Date();
+      const comment1 = createMockComment('comment-1', 'post-1', userId, new Date(now.getTime() - 1000));
+
+      (prismaMock.comment.findMany as jest.Mock).mockClear().mockResolvedValue([comment1]);
+      (prismaMock.commentLike.count as jest.Mock).mockClear().mockResolvedValue(0);
+      (prismaMock.comment.count as jest.Mock).mockClear().mockResolvedValue(1);
+
+      await request(app)
+        .get('/api/posts/recent-comments')
+        .expect(200);
+
+      expect(prismaMock.comment.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            parentId: null,
+            post: {
+              published: true,
+            },
+          }),
+          orderBy: {
+            createdAt: 'desc',
+          },
+        })
+      );
+    });
+
+    it('should return only comments from published posts', async () => {
+      const now = new Date();
+      const comment1 = createMockComment('comment-1', 'post-1', userId, new Date(now.getTime() - 1000));
+
+      (prismaMock.comment.findMany as jest.Mock).mockClear().mockResolvedValue([comment1]);
+      (prismaMock.commentLike.count as jest.Mock).mockClear().mockResolvedValue(0);
+      (prismaMock.comment.count as jest.Mock).mockClear().mockResolvedValue(1);
+
+      await request(app)
+        .get('/api/posts/recent-comments')
+        .expect(200);
+
+      expect(prismaMock.comment.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            post: {
+              published: true,
+            },
+          }),
+        })
+      );
+    });
+
+    it('should support pagination with page and limit', async () => {
+      const now = new Date();
+      const comment1 = createMockComment('comment-1', 'post-1', userId, new Date(now.getTime() - 1000));
+
+      (prismaMock.comment.findMany as jest.Mock).mockClear().mockResolvedValue([comment1]);
+      (prismaMock.commentLike.count as jest.Mock).mockClear().mockResolvedValue(0);
+      (prismaMock.comment.count as jest.Mock).mockClear().mockResolvedValue(25);
+
+      const res = await request(app)
+        .get('/api/posts/recent-comments?page=2&limit=10')
+        .expect(200);
+
+      expect(prismaMock.comment.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          skip: 10,
+          take: 10,
+        })
+      );
+      expect(res.body.pagination).toMatchObject({
+        page: 2,
+        limit: 10,
+        total: 25,
+        totalPages: 3,
+      });
+    });
+
+    it('should order comments by createdAt descending (newest first)', async () => {
+      const now = new Date();
+      const comment1 = createMockComment('comment-1', 'post-1', userId, new Date(now.getTime() - 1000));
+      const comment2 = createMockComment('comment-2', 'post-2', userId2, new Date(now.getTime() - 2000));
+
+      (prismaMock.comment.findMany as jest.Mock).mockClear().mockResolvedValue([comment1, comment2]);
+      (prismaMock.commentLike.count as jest.Mock).mockClear()
+        .mockResolvedValueOnce(0)
+        .mockResolvedValueOnce(0);
+      (prismaMock.comment.count as jest.Mock).mockClear().mockResolvedValue(2);
+
+      await request(app)
+        .get('/api/posts/recent-comments')
+        .expect(200);
+
+      expect(prismaMock.comment.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderBy: {
+            createdAt: 'desc',
+          },
+        })
+      );
+    });
+
+    it('should include user information for each comment', async () => {
+      const now = new Date();
+      const comment1 = createMockComment('comment-1', 'post-1', userId, new Date(now.getTime() - 1000));
+
+      (prismaMock.comment.findMany as jest.Mock).mockClear().mockResolvedValue([comment1]);
+      (prismaMock.commentLike.count as jest.Mock).mockClear().mockResolvedValue(0);
+      (prismaMock.comment.count as jest.Mock).mockClear().mockResolvedValue(1);
+
+      const res = await request(app)
+        .get('/api/posts/recent-comments')
+        .expect(200);
+
+      expect(res.body.comments[0]).toHaveProperty('user');
+      expect(res.body.comments[0].user).toHaveProperty('id', userId);
+      expect(res.body.comments[0].user).toHaveProperty('username', 'testuser');
+    });
+
+    it('should include post information for each comment', async () => {
+      const now = new Date();
+      const comment1 = createMockComment('comment-1', 'post-1', userId, new Date(now.getTime() - 1000));
+
+      (prismaMock.comment.findMany as jest.Mock).mockClear().mockResolvedValue([comment1]);
+      (prismaMock.commentLike.count as jest.Mock).mockClear().mockResolvedValue(0);
+      (prismaMock.comment.count as jest.Mock).mockClear().mockResolvedValue(1);
+
+      const res = await request(app)
+        .get('/api/posts/recent-comments')
+        .expect(200);
+
+      expect(res.body.comments[0]).toHaveProperty('post');
+      expect(res.body.comments[0].post).toHaveProperty('id', 'post-1');
+      expect(res.body.comments[0].post).toHaveProperty('title', 'Post post-1');
+      expect(res.body.comments[0].post).toHaveProperty('slug', 'post-post-1');
+    });
+
+    it('should include like count for each comment', async () => {
+      const now = new Date();
+      const comment1 = createMockComment('comment-1', 'post-1', userId, new Date(now.getTime() - 1000));
+
+      (prismaMock.comment.findMany as jest.Mock).mockClear().mockResolvedValue([comment1]);
+      (prismaMock.commentLike.count as jest.Mock).mockClear().mockResolvedValue(7);
+      (prismaMock.comment.count as jest.Mock).mockClear().mockResolvedValue(1);
+
+      const res = await request(app)
+        .get('/api/posts/recent-comments')
+        .expect(200);
+
+      expect(res.body.comments[0]).toHaveProperty('likeCount', 7);
+      expect(prismaMock.commentLike.count).toHaveBeenCalledWith({
+        where: { commentId: 'comment-1' },
+      });
+    });
+
+    it('should return empty array when no comments exist', async () => {
+      (prismaMock.comment.findMany as jest.Mock).mockClear().mockResolvedValue([]);
+      (prismaMock.commentLike.count as jest.Mock).mockClear();
+      (prismaMock.comment.count as jest.Mock).mockClear().mockResolvedValue(0);
+
+      const res = await request(app)
+        .get('/api/posts/recent-comments')
+        .expect(200);
+
+      expect(res.body.comments).toEqual([]);
+      expect(res.body.pagination).toMatchObject({
+        page: 1,
+        limit: 20,
+        total: 0,
+        totalPages: 0,
+      });
+    });
+
+    it('should use default pagination when not provided', async () => {
+      const now = new Date();
+      const comment1 = createMockComment('comment-1', 'post-1', userId, new Date(now.getTime() - 1000));
+
+      (prismaMock.comment.findMany as jest.Mock).mockClear().mockResolvedValue([comment1]);
+      (prismaMock.commentLike.count as jest.Mock).mockClear().mockResolvedValue(0);
+      (prismaMock.comment.count as jest.Mock).mockClear().mockResolvedValue(1);
+
+      await request(app)
+        .get('/api/posts/recent-comments')
+        .expect(200);
+
+      expect(prismaMock.comment.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          skip: 0,
+          take: 20,
+        })
+      );
+    });
+
+    it('should validate pagination parameters', async () => {
+      const res = await request(app)
+        .get('/api/posts/recent-comments?page=0')
+        .expect(400);
+
+      expect(res.body).toHaveProperty('error');
+    });
+
+    it('should validate limit is within allowed range', async () => {
+      const res = await request(app)
+        .get('/api/posts/recent-comments?limit=101')
+        .expect(400);
+
+      expect(res.body).toHaveProperty('error');
+    });
+  });
+
   describe('PATCH /api/posts/:id/comments/settings', () => {
     it('allows the author to disable comments and blocks creation after', async () => {
       (prismaMock.post.findUnique as jest.Mock).mockResolvedValueOnce({ id: 'p1', slug: 's', authorId: userId });
@@ -591,4 +856,4 @@ describe('Comments API (mocked)', () => {
       expect(res.body).toHaveProperty('error', 'Not authorized to update this post');
     });
   });
-});
+})  
