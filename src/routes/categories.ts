@@ -1,27 +1,15 @@
-import { Router, Response } from 'express';
+import { Router, Request, Response } from 'express';
 import { asyncHandler } from '../middleware/validation';
+import * as categoriesController from '../controllers/categoriesController';
 import { prisma } from '../lib/prisma';
 import { authenticateToken, AuthRequest, generateSlug } from '../utils/auth';
 import { requireAdmin } from '../middleware/authorization';
 
 const router = Router();
 
-router.get('/', asyncHandler(async (req: any, res: Response) => {
-  const categories = await prisma.category.findMany({
-    select: {
-      id: true,
-      name: true,
-      slug: true,
-    },
-    orderBy: {
-      name: 'asc',
-    },
-  });
-
-  return res.json({
-    categories,
-  });
-}));
+router.get('/', asyncHandler(
+  (req: Request, res: Response) => categoriesController.getAllCategories(req, res)
+));
 
 // Admin-only route: Create category
 router.post(
