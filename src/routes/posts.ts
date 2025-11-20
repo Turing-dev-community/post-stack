@@ -6,6 +6,7 @@ import { AuthRequest } from '../utils/auth';
 import { cacheMiddleware } from '../middleware/cache';
 import { CACHE_CONFIG } from '../constants/cache';
 import * as postsController from '../controllers/postsController';
+import { requireAuthor } from '@/middleware/authorization';
 
 const router = Router();
 
@@ -42,7 +43,7 @@ router.get('/drafts/:slug', authenticateToken, cacheMiddleware(CACHE_CONFIG.TTL_
 ));
 
 // Create new post
-router.post('/', validatePost, authenticateToken, handleValidationErrors, asyncHandler(
+router.post('/', validatePost, authenticateToken, requireAuthor, handleValidationErrors, asyncHandler(
   (req: AuthRequest, res: Response) => postsController.createPost(req, res)
 ));
 
