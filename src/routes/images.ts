@@ -4,6 +4,7 @@ import path from "path";
 import fs from "fs";
 import { authenticateToken } from "../utils/auth";
 import { asyncHandler } from "../middleware/validation";
+import { requireAuthor } from "../middleware/authorization";
 import {
 	upload as uploadController,
 	get as getController,
@@ -63,6 +64,7 @@ const upload = multer({
 router.post(
 	"/upload",
 	authenticateToken,
+	requireAuthor,
 	upload.single("image"),
 	asyncHandler(uploadController)
 );
