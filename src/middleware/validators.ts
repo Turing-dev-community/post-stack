@@ -121,6 +121,12 @@ export const validateComment = [
     .withMessage("Comment content must be between 1 and 5000 characters"),
 ];
 
+export const validateCommentSettings = [
+  body("allowComments")
+    .isBoolean()
+    .withMessage("allowComments must be a boolean"),
+];
+
 export const validateProfileUpdate = [
   body("profilePicture")
     .optional({ nullable: true })
