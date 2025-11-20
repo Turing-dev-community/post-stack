@@ -1,6 +1,6 @@
 import { Response } from 'express';
 import { asyncHandler } from '../middleware/validation';
-import { AuthRequest, comparePassword, generateToken, hashPassword, getUserRole } from '../utils/auth';
+import { AuthRequest, comparePassword, generateToken, generateAccessToken, generateRefreshToken, verifyRefreshToken, revokeRefreshToken, revokeAllUserRefreshTokens, hashPassword, getUserRole } from '../utils/auth';
 import { prisma } from '../lib/prisma';
 import type { User } from '@prisma/client';
 
@@ -29,11 +29,13 @@ export const signup = asyncHandler(async (req: AuthRequest, res: Response) => {
   // Determine user role (default is AUTHOR)
   const role = await getUserRole(user.id, user.email);
 
-  const token = generateToken(user.id);
+  const accessToken = generateAccessToken(user.id);
+  const refreshToken = await generateRefreshToken(user.id);
   return res.status(201).json({ 
     message: 'User created successfully', 
     user: { ...user, role }, 
-    token 
+    accessToken,
+    refreshToken 
   });
 });
 
@@ -60,11 +62,13 @@ export const login = asyncHandler(async (req: AuthRequest, res: Response) => {
 
   const role = await getUserRole(user.id, user.email);
 
-  const token = generateToken(user.id);
+  const accessToken = generateAccessToken(user.id);
+  const refreshToken = await generateRefreshToken(user.id);
   return res.json({
     message: 'Login successful',
     user: { id: user.id, email: user.email, username: user.username, role },
-    token,
+    accessToken,
+    refreshToken,
   });
 });
 
@@ -136,13 +140,15 @@ export const reactivateAccount = asyncHandler(async (req: AuthRequest, res: Resp
     data: { deletedAt: null },
   });
 
-  // Generate new token
-  const token = generateToken(user.id);
+  // Generate new tokens
+  const accessToken = generateAccessToken(user.id);
+  const refreshToken = await generateRefreshToken(user.id);
 
   return res.json({
     message: 'Account reactivated successfully',
     user: { id: user.id, email: user.email, username: user.username },
-    token,
+    accessToken,
+    refreshToken,
   });
 });
 
@@ -170,5 +176,65 @@ export const deactivateAccount = asyncHandler(async (req: AuthRequest, res: Resp
     message: 'Account deactivated successfully',
     note:
       'Your account has been deactivated. You will not be able to log in or access your account.',
+  });
+});
+
+export const refreshAccessToken = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { refreshToken } = req.body;
+
+  if (!refreshToken) {
+    return res.status(400).json({ error: 'Refresh token required' });
+  }
+
+  const userId = await verifyRefreshToken(refreshToken);
+
+  if (!userId) {
+    return res.status(403).json({ error: 'Invalid or expired refresh token' });
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, email: true, username: true, deletedAt: true },
+  });
+
+  if (!user) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+
+  if (user.deletedAt) {
+    return res.status(403).json({ error: 'Account has been deactivated' });
+  }
+
+  const accessToken = generateAccessToken(userId);
+
+  return res.json({
+    message: 'Access token refreshed successfully',
+    accessToken,
+  });
+});
+
+export const logout = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { refreshToken } = req.body;
+
+  if (!refreshToken) {
+    return res.status(400).json({ error: 'Refresh token required' });
+  }
+
+  await revokeRefreshToken(refreshToken);
+
+  return res.json({
+    message: 'Logged out successfully',
+  });
+});
+
+export const logoutAll = asyncHandler(async (req: AuthRequest, res: Response) => {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+
+  await revokeAllUserRefreshTokens(req.user.id);
+
+  return res.json({
+    message: 'Logged out from all devices successfully',
   });
 });
