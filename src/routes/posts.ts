@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { authenticateToken } from '../utils/auth';
-import { validatePost, validateComment, validatePagination, validateCommentSettings } from '../middleware/validators';
+import { validatePost, validateComment, validatePagination, validateCommentSettings, validateBulkPosts } from '../middleware/validators';
 import { handleValidationErrors, asyncHandler } from '../middleware/validation';
 import { AuthRequest } from '../utils/auth';
 import { cacheMiddleware } from '../middleware/cache';
@@ -55,6 +55,11 @@ router.get('/drafts/:slug', authenticateToken, cacheMiddleware(CACHE_CONFIG.TTL_
 // Create new post
 router.post('/', validatePost, authenticateToken, requireAuthor, handleValidationErrors, asyncHandler(
   (req: AuthRequest, res: Response) => postsController.createPost(req, res)
+));
+
+// Create multiple posts in bulk
+router.post('/bulk', validateBulkPosts, authenticateToken, requireAuthor, handleValidationErrors, asyncHandler(
+  (req: AuthRequest, res: Response) => postsController.bulkCreatePosts(req, res)
 ));
 
 // Update post

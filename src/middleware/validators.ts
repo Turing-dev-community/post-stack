@@ -113,6 +113,70 @@ export const validatePost = [
     }),
 ];
 
+export const validateBulkPosts = [
+  body("posts")
+    .isArray({ min: 1, max: 50 })
+    .withMessage("Posts must be an array with between 1 and 50 items")
+    .custom((posts) => {
+      if (!Array.isArray(posts)) {
+        throw new Error("Posts must be an array");
+      }
+      if (posts.length === 0) {
+        throw new Error("At least one post is required");
+      }
+      if (posts.length > 50) {
+        throw new Error("Maximum 50 posts allowed per request");
+      }
+      return true;
+    })
+    .custom((posts) => {
+      for (let i = 0; i < posts.length; i++) {
+        const post = posts[i];
+        if (!post.title || typeof post.title !== "string" || post.title.trim().length === 0) {
+          throw new Error(`Post at index ${i}: title is required and must be a non-empty string`);
+        }
+        if (post.title.trim().length > 200) {
+          throw new Error(`Post at index ${i}: title must be 200 characters or less`);
+        }
+        if (!post.content || typeof post.content !== "string" || post.content.trim().length === 0) {
+          throw new Error(`Post at index ${i}: content is required and must be a non-empty string`);
+        }
+        if (post.published !== undefined && typeof post.published !== "boolean") {
+          throw new Error(`Post at index ${i}: published must be a boolean`);
+        }
+        if (post.featured !== undefined && typeof post.featured !== "boolean") {
+          throw new Error(`Post at index ${i}: featured must be a boolean`);
+        }
+        if (post.categoryId !== undefined && post.categoryId !== null && typeof post.categoryId !== "string") {
+          throw new Error(`Post at index ${i}: categoryId must be a string or null`);
+        }
+        if (post.metaTitle !== undefined && post.metaTitle !== null && (typeof post.metaTitle !== "string" || post.metaTitle.trim().length > 60)) {
+          throw new Error(`Post at index ${i}: metaTitle must be 60 characters or less`);
+        }
+        if (post.metaDescription !== undefined && post.metaDescription !== null && (typeof post.metaDescription !== "string" || post.metaDescription.trim().length > 160)) {
+          throw new Error(`Post at index ${i}: metaDescription must be 160 characters or less`);
+        }
+        if (post.ogImage !== undefined && post.ogImage !== null && typeof post.ogImage !== "string") {
+          throw new Error(`Post at index ${i}: ogImage must be a string or null`);
+        }
+        if (post.tags !== undefined) {
+          if (!Array.isArray(post.tags)) {
+            throw new Error(`Post at index ${i}: tags must be an array`);
+          }
+          if (post.tags.length > 5) {
+            throw new Error(`Post at index ${i}: maximum 5 tags allowed`);
+          }
+          for (const tagId of post.tags) {
+            if (typeof tagId !== "string") {
+              throw new Error(`Post at index ${i}: each tag ID must be a string`);
+            }
+          }
+        }
+      }
+      return true;
+    }),
+];
+
 export const validateComment = [
   body("content")
     .trim()
