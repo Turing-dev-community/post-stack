@@ -182,3 +182,11 @@ export const validateReactivate = [
     .notEmpty()
     .withMessage("Password is required"),
 ];
+
+export const validatePostReport = [
+  body("reason")
+    .trim()
+    .customSanitizer(sanitizeText)
+    .isLength({ min: 5, max: 500 })
+    .withMessage("Reason must be between 5 and 500 characters"),
+];

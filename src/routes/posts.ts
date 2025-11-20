@@ -8,6 +8,8 @@ import { CACHE_CONFIG } from '../constants/cache';
 import * as postsController from '../controllers/postsController';
 import { getRecentComments } from '../controllers/commentsController';
 import { requireAuthor } from '../middleware/authorization';
+import { reportPost } from '../controllers/reportsController';
+import { validatePostReport } from '../middleware/validators';
 
 const router = Router();
 
@@ -88,6 +90,10 @@ router.delete('/:id/save', authenticateToken, asyncHandler(
 // Update comment settings (enable/disable comments)
 router.patch('/:id/comments/settings', authenticateToken, validateCommentSettings, handleValidationErrors, asyncHandler(
   (req: AuthRequest, res: Response) => postsController.updateCommentSettings(req, res)
+));
+
+router.post('/:postId/report', authenticateToken, validatePostReport, handleValidationErrors, asyncHandler(
+  (req: AuthRequest, res: Response) => reportPost(req, res)
 ));
 
 export default router;
