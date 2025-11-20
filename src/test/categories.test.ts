@@ -159,5 +159,72 @@ describe('Categories API', () => {
         })
       );
     });
+
+    it('should return correct response structure', async () => {
+      const mockCategories = [
+        { id: '1', name: 'Technology', slug: 'technology' },
+        { id: '2', name: 'News', slug: 'news' },
+      ];
+
+      (prismaMock.category.findMany as jest.Mock).mockResolvedValue(mockCategories);
+
+      const response = await request(app)
+        .get('/api/categories')
+        .expect(200);
+
+      // Verify response structure
+      expect(response.body).toHaveProperty('categories');
+      expect(Array.isArray(response.body.categories)).toBe(true);
+      expect(response.body.categories.length).toBe(2);
+      
+      // Verify each category has the correct structure
+      response.body.categories.forEach((category: any) => {
+        expect(category).toHaveProperty('id');
+        expect(category).toHaveProperty('name');
+        expect(category).toHaveProperty('slug');
+        expect(Object.keys(category).length).toBe(3); // Only id, name, slug
+      });
+    });
+
+    it('should handle large number of categories', async () => {
+      const mockCategories = Array.from({ length: 100 }, (_, i) => ({
+        id: `cat-${i + 1}`,
+        name: `Category ${i + 1}`,
+        slug: `category-${i + 1}`,
+      }));
+
+      (prismaMock.category.findMany as jest.Mock).mockResolvedValue(mockCategories);
+
+      const response = await request(app)
+        .get('/api/categories')
+        .expect(200);
+
+      expect(response.body.categories).toHaveLength(100);
+      expect(response.body.categories[0]).toHaveProperty('id');
+      expect(response.body.categories[0]).toHaveProperty('name');
+      expect(response.body.categories[0]).toHaveProperty('slug');
+    });
+
+    it('should maintain consistent response format across multiple requests', async () => {
+      const mockCategories = [
+        { id: '1', name: 'Technology', slug: 'technology' },
+      ];
+
+      (prismaMock.category.findMany as jest.Mock).mockResolvedValue(mockCategories);
+
+      const response1 = await request(app)
+        .get('/api/categories')
+        .expect(200);
+
+      const response2 = await request(app)
+        .get('/api/categories')
+        .expect(200);
+
+      // Both responses should have the same structure
+      expect(response1.body).toHaveProperty('categories');
+      expect(response2.body).toHaveProperty('categories');
+      expect(Array.isArray(response1.body.categories)).toBe(true);
+      expect(Array.isArray(response2.body.categories)).toBe(true);
+    });
   });
 });

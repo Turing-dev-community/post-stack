@@ -1,6 +1,9 @@
 import { Router, Request, Response } from 'express';
 import { asyncHandler } from '../middleware/validation';
 import * as categoriesController from '../controllers/categoriesController';
+import { prisma } from '../lib/prisma';
+import { authenticateToken, AuthRequest, generateSlug } from '../utils/auth';
+import { requireAdmin } from '../middleware/authorization';
 
 const router = Router();
 
