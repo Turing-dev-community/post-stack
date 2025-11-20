@@ -20,44 +20,55 @@ export async function followUser(followerId: string, followingId: string): Promi
     throw new Error('User not found');
   }
 
-  // Check if already following
-  const existingFollow = await prisma.follow.findFirst({
-    where: {
-      followerId,
-      followingId,
-    },
-  });
+  try {
+    await prisma.$transaction(async (tx) => {
+      const existingFollow = await tx.follow.findUnique({
+        where: {
+          followerId_followingId: {
+            followerId,
+            followingId,
+          },
+        },
+      });
 
-  if (existingFollow) {
-    throw new Error('Already following this user');
+      if (existingFollow) {
+        throw new Error('Already following this user');
+      }
+
+      await tx.follow.create({
+        data: {
+          followerId,
+          followingId,
+        },
+      });
+    });
+  } catch (error: any) {
+    if (error.code === 'P2002') {
+      throw new Error('Already following this user');
+    }
+    throw error;
   }
-
-  // Create follow relationship
-  await prisma.follow.create({
-    data: {
-      followerId,
-      followingId,
-    },
-  });
 }
 
 export async function unfollowUser(followerId: string, followingId: string): Promise<void> {
-  const existingFollow = await prisma.follow.findFirst({
-    where: {
-      followerId,
-      followingId,
-    },
-  });
 
-  if (!existingFollow) {
-    throw new Error('Not following this user');
+  try {
+    const result = await prisma.follow.deleteMany({
+      where: {
+        followerId,
+        followingId,
+      },
+    });
+
+    if (result.count === 0) {
+      throw new Error('Not following this user');
+    }
+  } catch (error: any) {
+    if (error.code === 'P2025') {
+      throw new Error('Not following this user');
+    }
+    throw error;
   }
-
-  await prisma.follow.delete({
-    where: {
-      id: existingFollow.id,
-    },
-  });
 }
 
 export async function getFollowers(userId: string, page: number, limit: number) {

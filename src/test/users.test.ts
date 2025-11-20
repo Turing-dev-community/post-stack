@@ -67,7 +67,7 @@ describe('User Followers Routes', () => {
       // The mockAuthUser already handles both userId and otherUserId
 
       // Mock: Check if already following (should return null)
-      (prismaMock.follow.findFirst as jest.Mock).mockResolvedValue(null);
+      (prismaMock.follow.findUnique as jest.Mock).mockResolvedValue(null);
 
       // Mock: Create follow relationship
       (prismaMock.follow.create as jest.Mock).mockResolvedValue({
@@ -75,6 +75,10 @@ describe('User Followers Routes', () => {
         followerId: userId,
         followingId: otherUserId,
         createdAt: new Date(),
+      });
+
+      (prismaMock.$transaction as jest.Mock).mockImplementation(async (callback) => {
+        return await callback(prismaMock);
       });
 
       const response = await request(app)
@@ -88,10 +92,12 @@ describe('User Followers Routes', () => {
       // Verify Prisma was called correctly
       // First call: auth middleware (userId), Second call: check user to follow (otherUserId)
       expect(prismaMock.user.findUnique).toHaveBeenCalledTimes(2);
-      expect(prismaMock.follow.findFirst).toHaveBeenCalledWith({
+      expect(prismaMock.follow.findUnique).toHaveBeenCalledWith({
         where: {
-          followerId: userId,
-          followingId: otherUserId,
+          followerId_followingId: {
+            followerId: userId,
+            followingId: otherUserId,
+          },
         },
       });
       expect(prismaMock.follow.create).toHaveBeenCalledWith({
@@ -115,7 +121,7 @@ describe('User Followers Routes', () => {
 
       // Verify only auth call was made, not the business logic call
       expect(prismaMock.user.findUnique).toHaveBeenCalledTimes(1);
-      expect(prismaMock.follow.findFirst).not.toHaveBeenCalled();
+      expect(prismaMock.follow.findUnique).not.toHaveBeenCalled();
     });
 
     it('should prevent duplicate follows', async () => {
@@ -123,10 +129,14 @@ describe('User Followers Routes', () => {
       mockAuthUser(userId);
 
       // Mock: Already following (return existing follow)
-      (prismaMock.follow.findFirst as jest.Mock).mockResolvedValue({
+      (prismaMock.follow.findUnique as jest.Mock).mockResolvedValue({
         id: 'follow-existing',
         followerId: userId,
         followingId: otherUserId,
+      });
+
+      (prismaMock.$transaction as jest.Mock).mockImplementation(async (callback) => {
+        return await callback(prismaMock);
       });
 
       const response = await request(app)
@@ -147,6 +157,27 @@ describe('User Followers Routes', () => {
 
       expect(response.status).toBe(401);
     });
+
+    it('should handle race condition with unique constraint violation', async () => {
+      mockAuthUser(userId);
+
+      (prismaMock.follow.findUnique as jest.Mock).mockResolvedValue(null);
+
+      const prismaError = new Error('Unique constraint failed');
+      (prismaError as any).code = 'P2002';
+      (prismaMock.follow.create as jest.Mock).mockRejectedValue(prismaError);
+
+      (prismaMock.$transaction as jest.Mock).mockImplementation(async (callback) => {
+        return await callback(prismaMock);
+      });
+
+      const response = await request(app)
+        .post(`/api/users/${otherUserId}/follow`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(400);
+
+      expect(response.body.error).toBe('Already following this user');
+    });
   });
 
   describe('DELETE /api/users/:userId/follow', () => {
@@ -154,18 +185,8 @@ describe('User Followers Routes', () => {
       // Mock auth user lookup
       mockAuthUser(userId);
       
-      // Mock: Find existing follow relationship
-      (prismaMock.follow.findFirst as jest.Mock).mockResolvedValue({
-        id: 'follow-1',
-        followerId: userId,
-        followingId: otherUserId,
-      });
-
-      // Mock: Delete follow relationship
-      (prismaMock.follow.delete as jest.Mock).mockResolvedValue({
-        id: 'follow-1',
-        followerId: userId,
-        followingId: otherUserId,
+      (prismaMock.follow.deleteMany as jest.Mock).mockResolvedValue({
+        count: 1,
       });
 
       const response = await request(app)
@@ -177,15 +198,10 @@ describe('User Followers Routes', () => {
       expect(response.body.followingId).toBe(otherUserId);
 
       // Verify Prisma was called correctly
-      expect(prismaMock.follow.findFirst).toHaveBeenCalledWith({
+      expect(prismaMock.follow.deleteMany).toHaveBeenCalledWith({
         where: {
           followerId: userId,
           followingId: otherUserId,
-        },
-      });
-      expect(prismaMock.follow.delete).toHaveBeenCalledWith({
-        where: {
-          id: 'follow-1',
         },
       });
     });
@@ -196,6 +212,21 @@ describe('User Followers Routes', () => {
         .expect(401);
 
       expect(response.status).toBe(401);
+    });
+
+    it('should handle race condition when unfollowing (already deleted)', async () => {
+      mockAuthUser(userId);
+
+      (prismaMock.follow.deleteMany as jest.Mock).mockResolvedValue({
+        count: 0,
+      });
+
+      const response = await request(app)
+        .delete(`/api/users/${otherUserId}/follow`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(400);
+
+      expect(response.body.error).toBe('Not following this user');
     });
   });
 
