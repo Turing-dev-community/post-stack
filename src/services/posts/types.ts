@@ -27,17 +27,9 @@ export interface CreatePostData {
 	metaDescription?: string | null;
 	ogImage?: string | null;
 	tags?: string[];
+	scheduledAt?: string | null;
 }
 
-export interface UpdatePostData {
-	title?: string;
-	content?: string;
-	published?: boolean;
-	featured?: boolean;
-	categoryId?: string | null;
-	metaTitle?: string | null;
-	metaDescription?: string | null;
-	ogImage?: string | null;
-	tags?: string[];
+export interface UpdatePostData extends Partial<CreatePostData> {
+	id?: string;
 }
-
