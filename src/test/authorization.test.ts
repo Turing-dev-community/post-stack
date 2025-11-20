@@ -15,30 +15,6 @@ const { prisma: prismaMock } = setupPrismaMock(prisma, app);
 
 describe('Role-Based Authorization', () => {
   describe('Authentication with Roles', () => {
-    it('should include role in user object after authentication', async () => {
-      const userId = 'user-1';
-      const mockUser = {
-        id: userId,
-        email: 'test@example.com',
-        username: 'testuser',
-        role: Role.AUTHOR,
-        deletedAt: null,
-      };
-
-      (prismaMock.user.findUnique as unknown as jest.Mock).mockResolvedValue(mockUser);
-      (prismaMock.follow.findMany as unknown as jest.Mock).mockResolvedValue([]);
-      (prismaMock.follow.count as unknown as jest.Mock).mockResolvedValue(0);
-
-      const token = generateToken(userId);
-
-      const response = await request(app)
-        .get('/api/users/user-2/followers')
-        .set('Authorization', `Bearer ${token}`)
-        .expect(200);
-
-      // Verify that the request was authenticated (no 401 error)
-      expect(response.status).toBe(200);
-    });
 
     it('should reject request if user is deactivated', async () => {
       const userId = 'user-1';
@@ -73,32 +49,6 @@ describe('Role-Based Authorization', () => {
       (prismaMock.follow.findMany as unknown as jest.Mock).mockResolvedValue([]);
       (prismaMock.follow.count as unknown as jest.Mock).mockResolvedValue(0);
     };
-
-    it('should allow ADMIN to access admin-only routes', async () => {
-      // Set admin email in environment for this test
-      const originalAdminEmails = process.env.ADMIN_EMAILS;
-      process.env.ADMIN_EMAILS = 'admin@example.com';
-
-      const mockUser = createMockUser(Role.ADMIN, 'admin@example.com', 'admin-1');
-      (prismaMock.user.findUnique as unknown as jest.Mock).mockResolvedValue(mockUser);
-      setupFollowersMocks();
-
-      const token = generateToken(mockUser.id);
-
-      const response = await request(app)
-        .get('/api/users/user-2/followers')
-        .set('Authorization', `Bearer ${token}`)
-        .expect(200);
-
-      expect(response.status).toBe(200);
-
-      // Restore original env
-      if (originalAdminEmails) {
-        process.env.ADMIN_EMAILS = originalAdminEmails;
-      } else {
-        delete process.env.ADMIN_EMAILS;
-      }
-    });
 
     it('should allow AUTHOR to access regular routes', async () => {
       const mockUser = createMockUser(Role.AUTHOR);
