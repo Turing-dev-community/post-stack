@@ -6,6 +6,7 @@ import { AuthRequest } from '../utils/auth';
 import { cacheMiddleware } from '../middleware/cache';
 import { CACHE_CONFIG } from '../constants/cache';
 import * as postsController from '../controllers/postsController';
+import { getRecentComments } from '../controllers/commentsController';
 import { requireAuthor } from '../middleware/authorization';
 
 const router = Router();
@@ -27,6 +28,9 @@ router.get('/my-posts', authenticateToken, validatePagination, handleValidationE
 router.get('/saved', authenticateToken, validatePagination, handleValidationErrors, cacheMiddleware(CACHE_CONFIG.TTL_POSTS_LIST), asyncHandler(
   (req: AuthRequest, res: Response) => postsController.getSavedPosts(req, res)
 ));
+
+// Get recent comments across all posts
+router.get('/recent-comments', validatePagination, handleValidationErrors, cacheMiddleware(CACHE_CONFIG.TTL_COMMENTS_RECENT), getRecentComments);
 
 // Get related posts for a post by slug
 router.get('/:slug/related', cacheMiddleware(CACHE_CONFIG.TTL_POSTS_LIST), asyncHandler(
