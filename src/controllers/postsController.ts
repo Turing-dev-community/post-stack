@@ -88,7 +88,12 @@ export async function getAllPosts(req: AuthRequest, res: Response): Promise<Resp
     }
   }
 
-  const whereClause: any = { published: true };
+  const whereClause: any = { 
+    published: true,
+    author: {
+      deletedAt: null, // Filter out posts from deactivated users
+    },
+  };
 
   if (titleQuery && titleQuery.trim()) {
     whereClause.title = {
@@ -214,6 +219,9 @@ export async function getTrendingPosts(req: AuthRequest, res: Response): Promise
     published: true,
     createdAt: {
       gte: thirtyDaysAgo,
+    },
+    author: {
+      deletedAt: null, // Filter out posts from deactivated users
     },
   };
 
@@ -450,7 +458,14 @@ export async function getSavedPosts(req: AuthRequest, res: Response): Promise<Re
   const skip = (page - 1) * limit;
 
   const savedPosts = await prisma.savedPost.findMany({
-    where: { userId: req.user.id },
+    where: { 
+      userId: req.user.id,
+      post: {
+        author: {
+          deletedAt: null, // Filter out posts from deactivated users
+        },
+      },
+    },
     include: {
       post: {
         include: {
@@ -499,7 +514,14 @@ export async function getSavedPosts(req: AuthRequest, res: Response): Promise<Re
   );
 
   const total = await prisma.savedPost.count({
-    where: { userId: req.user.id },
+    where: { 
+      userId: req.user.id,
+      post: {
+        author: {
+          deletedAt: null, // Filter out posts from deactivated users
+        },
+      },
+    },
   });
 
   return res.json({
@@ -546,6 +568,9 @@ export async function getRelatedPosts(req: AuthRequest, res: Response): Promise<
       published: true,
       id: {
         not: post.id,
+      },
+      author: {
+        deletedAt: null, // Filter out posts from deactivated users
       },
       tags: {
         some: {
@@ -599,12 +624,13 @@ export async function getPostBySlug(req: AuthRequest, res: Response): Promise<Re
   const { slug } = req.params;
 
   const post = await prisma.post.findUnique({
-    where: { slug, published: true },
+    where: { slug },
     include: {
       author: {
         select: {
           id: true,
           username: true,
+          deletedAt: true, // Include deletedAt to check if author is deactivated
         },
       },
       category: {
@@ -627,7 +653,7 @@ export async function getPostBySlug(req: AuthRequest, res: Response): Promise<Re
     },
   });
 
-  if (!post) {
+  if (!post || !post.published || post.author.deletedAt) {
     return res.status(404).json({
       error: 'Post not found',
     });
@@ -649,8 +675,11 @@ export async function getPostBySlug(req: AuthRequest, res: Response): Promise<Re
     post.viewCount += 1;
   }
 
+  // Remove deletedAt from author object before returning
+  const { deletedAt, ...authorWithoutDeletedAt } = post.author;
   const postWithLikes = {
     ...post,
+    author: authorWithoutDeletedAt,
     likeCount,
     readingTime: estimateReadingTime(post.content),
     tags: post.tags.map((postTag: any) => postTag.tag),
