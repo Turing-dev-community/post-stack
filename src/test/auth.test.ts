@@ -150,6 +150,15 @@ describe("Authentication Routes (mocked)", () => {
 				email: "test@example.com",
 				username: "testuser",
 				password: hashed,
+				deletedAt: null,
+				failedLoginAttempts: 0,
+				lockedUntil: null,
+			});
+
+			(prismaMock.user.update as unknown as jest.Mock).mockResolvedValue({
+				id: "user-1",
+				failedLoginAttempts: 0,
+				lockedUntil: null,
 			});
 			(prismaMock.refreshToken.create as unknown as jest.Mock).mockResolvedValue({
 				id: "token-1",
@@ -199,6 +208,15 @@ describe("Authentication Routes (mocked)", () => {
 				email: "test@example.com",
 				username: "testuser",
 				password: hashed,
+				deletedAt: null,
+				failedLoginAttempts: 0,
+				lockedUntil: null,
+			});
+
+			(prismaMock.user.update as unknown as jest.Mock).mockResolvedValue({
+				id: "user-1",
+				failedLoginAttempts: 1,
+				lockedUntil: null,
 			});
 
 			const response = await request(app)
@@ -222,6 +240,14 @@ describe("Authentication Routes (mocked)", () => {
 				username: "trimlogin",
 				password: hashedPassword,
 				deletedAt: null,
+				failedLoginAttempts: 0,
+				lockedUntil: null,
+			});
+
+			(prismaMock.user.update as unknown as jest.Mock).mockResolvedValue({
+				id: "user-2",
+				failedLoginAttempts: 0,
+				lockedUntil: null,
 			});
 			(prismaMock.refreshToken.create as unknown as jest.Mock).mockResolvedValue({
 				id: "token-2",
@@ -241,6 +267,271 @@ describe("Authentication Routes (mocked)", () => {
 
 			expect(response.body).toHaveProperty("message", "Login successful");
 			expect(response.body.user.email).toBe("trimlogin@example.com");
+		});
+
+		describe("Account Lockout - Failed Login Attempts", () => {
+			it("should increment failedLoginAttempts on wrong password", async () => {
+				const hashed = await bcrypt.hash("Password123", 12);
+				const userId = "user-lockout-1";
+				(
+					prismaMock.user.findUnique as unknown as jest.Mock
+				).mockResolvedValue({
+					id: userId,
+					email: "lockout@example.com",
+					username: "lockoutuser",
+					password: hashed,
+					deletedAt: null,
+					failedLoginAttempts: 0,
+					lockedUntil: null,
+				});
+
+				(prismaMock.user.update as unknown as jest.Mock).mockResolvedValue({
+					id: userId,
+					failedLoginAttempts: 1,
+					lockedUntil: null,
+				});
+
+				const response = await request(app)
+					.post("/api/auth/login")
+					.send({ email: "lockout@example.com", password: "WrongPassword" })
+					.expect(401);
+
+				expect(response.body).toHaveProperty("error", "Invalid credentials");
+				expect(prismaMock.user.update).toHaveBeenCalledWith({
+					where: { id: userId },
+					data: expect.objectContaining({
+						failedLoginAttempts: 1,
+					}),
+				});
+			});
+
+			it("should lock account after 5 failed attempts", async () => {
+				const hashed = await bcrypt.hash("Password123", 12);
+				const userId = "user-lockout-2";
+				const futureLockout = new Date(Date.now() + 900000); // 15 minutes from now
+
+				(
+					prismaMock.user.findUnique as unknown as jest.Mock
+				).mockResolvedValue({
+					id: userId,
+					email: "lockout2@example.com",
+					username: "lockoutuser2",
+					password: hashed,
+					deletedAt: null,
+					failedLoginAttempts: 4, // 4 previous failed attempts
+					lockedUntil: null,
+				});
+
+				(prismaMock.user.update as unknown as jest.Mock).mockImplementation(
+					async (args: any) => {
+						if (args.data.lockedUntil) {
+							return {
+								id: userId,
+								failedLoginAttempts: 5,
+								lockedUntil: args.data.lockedUntil,
+							};
+						}
+						return {
+							id: userId,
+							failedLoginAttempts: args.data.failedLoginAttempts,
+							lockedUntil: null,
+						};
+					}
+				);
+
+				const response = await request(app)
+					.post("/api/auth/login")
+					.send({ email: "lockout2@example.com", password: "WrongPassword" })
+					.expect(401);
+
+				expect(response.body).toHaveProperty("error", "Invalid credentials");
+				expect(prismaMock.user.update).toHaveBeenCalledWith({
+					where: { id: userId },
+					data: expect.objectContaining({
+						failedLoginAttempts: 5,
+						lockedUntil: expect.any(Date),
+					}),
+				});
+			});
+
+			it("should return lockout error when account is locked", async () => {
+				const hashed = await bcrypt.hash("Password123", 12);
+				const userId = "user-lockout-3";
+				const lockedUntil = new Date(Date.now() + 900000); // 15 minutes from now
+
+				(
+					prismaMock.user.findUnique as unknown as jest.Mock
+				).mockResolvedValue({
+					id: userId,
+					email: "locked@example.com",
+					username: "lockeduser",
+					password: hashed,
+					deletedAt: null,
+					failedLoginAttempts: 5,
+					lockedUntil: lockedUntil,
+				});
+
+				const response = await request(app)
+					.post("/api/auth/login")
+					.send({ email: "locked@example.com", password: "Password123" })
+					.expect(423);
+
+				expect(response.body).toHaveProperty("error", "AccountLockedError");
+				expect(response.body).toHaveProperty("message");
+				expect(response.body).toHaveProperty("details");
+				expect(response.body.details).toHaveProperty("lockedUntil");
+				expect(response.body.details).toHaveProperty("retryAfter");
+			});
+
+			it("should reset failedLoginAttempts on successful login", async () => {
+				const hashed = await bcrypt.hash("Password123", 12);
+				const userId = "user-lockout-4";
+				(
+					prismaMock.user.findUnique as unknown as jest.Mock
+				).mockResolvedValue({
+					id: userId,
+					email: "reset@example.com",
+					username: "resetuser",
+					password: hashed,
+					deletedAt: null,
+					failedLoginAttempts: 3, // Had 3 failed attempts
+					lockedUntil: null,
+				});
+
+				(prismaMock.user.update as unknown as jest.Mock).mockResolvedValue({
+					id: userId,
+					failedLoginAttempts: 0,
+					lockedUntil: null,
+				});
+
+				const response = await request(app)
+					.post("/api/auth/login")
+					.send({ email: "reset@example.com", password: "Password123" })
+					.expect(200);
+
+				expect(response.body).toHaveProperty("message", "Login successful");
+				expect(prismaMock.user.update).toHaveBeenCalledWith({
+					where: { id: userId },
+					data: {
+						failedLoginAttempts: 0,
+						lockedUntil: null,
+					},
+				});
+			});
+
+			it("should automatically unlock account when lockout expires", async () => {
+				const hashed = await bcrypt.hash("Password123", 12);
+				const userId = "user-lockout-5";
+				const expiredLockout = new Date(Date.now() - 1000); // 1 second ago (expired)
+
+				// First call: find user with expired lockout
+				(
+					prismaMock.user.findUnique as unknown as jest.Mock
+				).mockResolvedValueOnce({
+					id: userId,
+					email: "expired@example.com",
+					username: "expireduser",
+					password: hashed,
+					deletedAt: null,
+					failedLoginAttempts: 5,
+					lockedUntil: expiredLockout,
+				});
+
+				// Second call: unlock account
+				(prismaMock.user.update as unknown as jest.Mock).mockResolvedValueOnce({
+					id: userId,
+					failedLoginAttempts: 0,
+					lockedUntil: null,
+				});
+
+				// Third call: successful login reset
+				(prismaMock.user.update as unknown as jest.Mock).mockResolvedValueOnce({
+					id: userId,
+					failedLoginAttempts: 0,
+					lockedUntil: null,
+				});
+
+				const response = await request(app)
+					.post("/api/auth/login")
+					.send({ email: "expired@example.com", password: "Password123" })
+					.expect(200);
+
+				expect(response.body).toHaveProperty("message", "Login successful");
+				// Should unlock first, then reset on successful login
+				expect(prismaMock.user.update).toHaveBeenCalledWith({
+					where: { id: userId },
+					data: { lockedUntil: null, failedLoginAttempts: 0 },
+				});
+			});
+
+			it("should not reveal lockout status on failed attempt before lockout", async () => {
+				const hashed = await bcrypt.hash("Password123", 12);
+				const userId = "user-lockout-6";
+				(
+					prismaMock.user.findUnique as unknown as jest.Mock
+				).mockResolvedValue({
+					id: userId,
+					email: "noreveal@example.com",
+					username: "norevealuser",
+					password: hashed,
+					deletedAt: null,
+					failedLoginAttempts: 4,
+					lockedUntil: null,
+				});
+
+				(prismaMock.user.update as unknown as jest.Mock).mockResolvedValue({
+					id: userId,
+					failedLoginAttempts: 5,
+					lockedUntil: expect.any(Date),
+				});
+
+				const response = await request(app)
+					.post("/api/auth/login")
+					.send({ email: "noreveal@example.com", password: "WrongPassword" })
+					.expect(401);
+
+				// Should return generic error, not lockout error
+				expect(response.body).toHaveProperty("error", "Invalid credentials");
+				expect(response.body).not.toHaveProperty("lockedUntil");
+			});
+
+			it("should handle deactivated account before lockout check", async () => {
+				const hashed = await bcrypt.hash("Password123", 12);
+				const userId = "user-lockout-7";
+				(
+					prismaMock.user.findUnique as unknown as jest.Mock
+				).mockResolvedValue({
+					id: userId,
+					email: "deactivated@example.com",
+					username: "deactivateduser",
+					password: hashed,
+					deletedAt: new Date(), // Account is deactivated
+					failedLoginAttempts: 5,
+					lockedUntil: new Date(Date.now() + 900000),
+				});
+
+				const response = await request(app)
+					.post("/api/auth/login")
+					.send({ email: "deactivated@example.com", password: "Password123" })
+					.expect(403);
+
+				expect(response.body).toHaveProperty("error", "Account has been deactivated");
+				expect(response.body).not.toHaveProperty("AccountLockedError");
+			});
+
+			it("should return generic error for non-existent email (no information leakage)", async () => {
+				(
+					prismaMock.user.findUnique as unknown as jest.Mock
+				).mockResolvedValue(null);
+
+				const response = await request(app)
+					.post("/api/auth/login")
+					.send({ email: "nonexistent@example.com", password: "AnyPassword" })
+					.expect(401);
+
+				expect(response.body).toHaveProperty("error", "Invalid credentials");
+				expect(response.body.error).not.toBe("AccountLockedError");
+			});
 		});
 	});
 

@@ -4,6 +4,7 @@ import { Request, Response, NextFunction } from 'express';
 import { prisma } from '../lib/prisma';
 import type { User } from '@prisma/client';
 import type { Role } from '../middleware/authorization';
+import { ACCOUNT_LOCKOUT_DURATION_MS } from '../constants/auth';
 
 export interface AuthRequest extends Request {
   user?: {
@@ -166,3 +167,27 @@ export const generateSlug = (title: string): string => {
     .replace(/[^a-z0-9 -]/g, '')
     .trim();
 };
+
+/**
+ * Check if account is currently locked
+ */
+export function isAccountLocked(lockedUntil: Date | null): boolean {
+  if (!lockedUntil) return false;
+  return new Date() < lockedUntil;
+}
+
+/**
+ * Calculate lockout expiration time
+ */
+export function calculateLockoutExpiration(): Date {
+  return new Date(Date.now() + ACCOUNT_LOCKOUT_DURATION_MS);
+}
+
+/**
+ * Get seconds until account is unlocked
+ */
+export function getSecondsUntilUnlock(lockedUntil: Date): number {
+  const now = Date.now();
+  const unlockTime = lockedUntil.getTime();
+  return Math.max(0, Math.ceil((unlockTime - now) / 1000));
+}

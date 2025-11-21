@@ -8,17 +8,19 @@ datasource db {
 }
 
 model User {
-  id             String         @id @default(cuid())
-  email          String         @unique
-  username       String         @unique
-  password       String
-  profilePicture String?
-  about          String?
-  deletedAt      DateTime?
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
-  followers      Follow[]       @relation("Follower")
-  following      Follow[]       @relation("Following")
+  id                   String        @id @default(cuid())
+  email                String        @unique
+  username             String        @unique
+  password             String
+  profilePicture       String?
+  about                String?
+  deletedAt            DateTime?
+  failedLoginAttempts  Int           @default(0)
+  lockedUntil          DateTime?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+  followers      Follow[]      @relation("Follower")
+  following      Follow[]      @relation("Following")
   likes          PostLike[]
   commentLikes   CommentLike[]
   savedPosts     SavedPost[]

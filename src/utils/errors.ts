@@ -47,6 +47,28 @@ export class UnauthorizedError extends AppError {
 }
 
 /**
+ * Account Locked Error (423)
+ * Used when an account is temporarily locked due to multiple failed login attempts
+ */
+export class AccountLockedError extends AppError {
+  public readonly lockedUntil: Date;
+  public readonly retryAfter: number;
+
+  constructor(lockedUntil: Date, message?: string) {
+    const retryAfter = Math.max(0, Math.ceil((lockedUntil.getTime() - Date.now()) / 1000));
+    super(
+      message || 'Account temporarily locked due to multiple failed login attempts',
+      423,
+      true,
+      { lockedUntil: lockedUntil.toISOString(), retryAfter }
+    );
+    this.name = 'AccountLockedError';
+    this.lockedUntil = lockedUntil;
+    this.retryAfter = retryAfter;
+  }
+}
+
+/**
  * Forbidden Error (403)
  */
 export class ForbiddenError extends AppError {
