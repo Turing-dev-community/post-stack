@@ -8,15 +8,17 @@ datasource db {
 }
 
 model User {
-  id             String        @id @default(cuid())
-  email          String        @unique
-  username       String        @unique
-  password       String
-  profilePicture String?
-  about          String?
-  deletedAt      DateTime?
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  id                   String        @id @default(cuid())
+  email                String        @unique
+  username             String        @unique
+  password             String
+  profilePicture       String?
+  about                String?
+  deletedAt            DateTime?
+  failedLoginAttempts  Int           @default(0)
+  lockedUntil          DateTime?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
   followers      Follow[]      @relation("Follower")
   following      Follow[]      @relation("Following")
   likes          PostLike[]
@@ -25,6 +27,7 @@ model User {
   posts          Post[]
   comments       Comment[]
   postReports    PostReport[]
+  refreshTokens  RefreshToken[]
 
   @@map("users")
 }
@@ -175,4 +178,17 @@ model PostTag {
 
   @@unique([postId, tagId])
   @@map("post_tags")
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
 }

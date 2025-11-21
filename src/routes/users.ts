@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authenticateToken } from '../utils/auth';
-import { followUser, unfollowUser, getFollowers, getFollowing, getUserPublicProfile } from '../controllers/usersController';
+import { followUser, unfollowUser, getFollowers, getFollowing, getUserActivity, getUserPublicProfile } from '../controllers/usersController';
 import { validatePagination } from '../middleware/validators';
 import { handleValidationErrors } from '../middleware/validation';
 import { cacheMiddleware } from '../middleware/cache';
@@ -39,6 +39,14 @@ router.get(
   validatePagination,
   handleValidationErrors,
   getFollowing
+);
+
+router.get(
+  '/:userId/activity',
+  validatePagination,
+  handleValidationErrors,
+  cacheMiddleware(CACHE_CONFIG.TTL_USER_ACTIVITY),
+  getUserActivity
 );
 
 export default router;

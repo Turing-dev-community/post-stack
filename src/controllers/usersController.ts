@@ -1,7 +1,7 @@
 import { Response } from 'express';
 import { AuthRequest } from '../utils/auth';
 import { asyncHandler } from '../middleware/validation';
-import { followUser as followUserService, unfollowUser as unfollowUserService, getFollowers as getFollowersService, getFollowing as getFollowingService, getUserPublicProfile as getUserPublicProfileService } from '../services/usersService';
+import { followUser as followUserService, unfollowUser as unfollowUserService, getFollowers as getFollowersService, getFollowing as getFollowingService, getUserPublicProfile as getUserPublicProfileService, getUserActivity as getUserActivityService} from '../services/usersService';
 
 export const followUser = asyncHandler(async (req: AuthRequest, res: Response) => {
   if (!req.user) {
@@ -103,6 +103,33 @@ export const getFollowing = asyncHandler(async (req: AuthRequest, res: Response)
     page: result.page,
     limit: result.limit,
   });
+});
+
+/**
+ * Get user activity feed (posts and comments)
+ */
+export const getUserActivity = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { userId } = req.params;
+  const page = parseInt(req.query.page as string) || 1;
+  const limit = parseInt(req.query.limit as string) || 20;
+
+  try {
+    const result = await getUserActivityService(userId, page, limit);
+
+    return res.json({
+      activities: result.activities,
+      pagination: result.pagination,
+    });
+  } catch (error: any) {
+    if (error.message === 'User not found') {
+      return res.status(404).json({
+        error: 'User not found',
+      });
+    }
+
+    // Unknown error
+    throw error;
+  }
 });
 
 export const getUserPublicProfile = asyncHandler(async (req: AuthRequest, res: Response) => {

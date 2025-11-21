@@ -1,4 +1,5 @@
-import { generateToken, hashPassword, comparePassword, generateSlug } from '../utils/auth';
+import { generateToken, hashPassword, comparePassword } from '../utils/auth';
+import { generateSlug } from '../utils/slugUtils';
 
 describe('Auth Utilities', () => {
   beforeEach(() => {
@@ -71,7 +72,8 @@ describe('Auth Utilities', () => {
       const title = '';
       const slug = generateSlug(title);
 
-      expect(slug).toBe('');
+      // New version returns a timestamp-based fallback for empty strings
+      expect(slug).toMatch(/^post-\d+$/);
     });
 
     it('should handle numbers and hyphens', () => {

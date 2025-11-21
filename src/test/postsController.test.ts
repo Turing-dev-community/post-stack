@@ -481,5 +481,278 @@ describe('Posts Controller - Deactivated User Filtering (mocked)', () => {
       );
     });
   });
+
+  describe('PUT /api/posts/:id - Slug Collision Handling', () => {
+    it('should generate new slug when title changes without collision', async () => {
+      const postId = 'post-to-update';
+      const existingPost = {
+        id: postId,
+        title: 'Original Title',
+        content: '# Content',
+        slug: 'original-title',
+        published: true,
+        featured: false,
+        createdAt: new Date('2024-01-01'),
+        updatedAt: new Date('2024-01-01'),
+        authorId: activeUserId,
+        categoryId: null,
+        viewCount: 0,
+      };
+
+      (prismaMock.post.findUnique as jest.Mock)
+        .mockResolvedValueOnce(existingPost) // For existing post check
+        .mockResolvedValueOnce(null); // For slug collision check (no collision)
+
+      (prismaMock.$transaction as jest.Mock).mockImplementation(async (callback: any) => {
+        return callback({
+          postTag: {
+            deleteMany: jest.fn().mockResolvedValue({}),
+          },
+          post: {
+            update: jest.fn().mockResolvedValue({
+              ...existingPost,
+              title: 'Completely New Title',
+              slug: 'completely-new-title',
+              updatedAt: new Date(),
+              author: { id: activeUserId, username: 'activeuser' },
+              category: null,
+              tags: [],
+            }),
+          },
+        });
+      });
+
+      (prismaMock.postLike.count as jest.Mock).mockResolvedValue(0);
+
+      const response = await request(app)
+        .put(`/api/posts/${postId}`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          title: 'Completely New Title',
+          content: '# Updated Content',
+        })
+        .expect(200);
+
+      expect(response.body.post.slug).toBe('completely-new-title');
+    });
+
+    it('should append -2 suffix when new slug conflicts with existing post', async () => {
+      const postId = 'post-to-update';
+      const existingPost = {
+        id: postId,
+        title: 'Original Title',
+        content: '# Content',
+        slug: 'original-title',
+        published: true,
+        featured: false,
+        createdAt: new Date('2024-01-01'),
+        updatedAt: new Date('2024-01-01'),
+        authorId: activeUserId,
+        categoryId: null,
+        viewCount: 0,
+      };
+
+      // Mock: existing post check
+      (prismaMock.post.findUnique as jest.Mock)
+        .mockResolvedValueOnce(existingPost) // For existing post check
+        .mockResolvedValueOnce({ id: 'other-post-id' }) // For slug collision check (base slug exists)
+        .mockResolvedValueOnce(null); // For slug collision check (-2 doesn't exist)
+
+      (prismaMock.$transaction as jest.Mock).mockImplementation(async (callback: any) => {
+        return callback({
+          postTag: {
+            deleteMany: jest.fn().mockResolvedValue({}),
+          },
+          post: {
+            update: jest.fn().mockResolvedValue({
+              ...existingPost,
+              title: 'My Awesome Post',
+              slug: 'my-awesome-post-2',
+              updatedAt: new Date(),
+              author: { id: activeUserId, username: 'activeuser' },
+              category: null,
+              tags: [],
+            }),
+          },
+        });
+      });
+
+      (prismaMock.postLike.count as jest.Mock).mockResolvedValue(0);
+
+      const response = await request(app)
+        .put(`/api/posts/${postId}`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          title: 'My Awesome Post',
+          content: '# Updated Content',
+        })
+        .expect(200);
+
+      expect(response.body.post.slug).toBe('my-awesome-post-2');
+    });
+
+    it('should find next available suffix when multiple collisions exist', async () => {
+      const postId = 'post-to-update';
+      const existingPost = {
+        id: postId,
+        title: 'Original Title',
+        content: '# Content',
+        slug: 'original-title',
+        published: true,
+        featured: false,
+        createdAt: new Date('2024-01-01'),
+        updatedAt: new Date('2024-01-01'),
+        authorId: activeUserId,
+        categoryId: null,
+        viewCount: 0,
+      };
+
+      // Mock: existing post check
+      (prismaMock.post.findUnique as jest.Mock)
+        .mockResolvedValueOnce(existingPost) // For existing post check
+        .mockResolvedValueOnce({ id: 'other-post-1' }) // Base slug exists
+        .mockResolvedValueOnce({ id: 'other-post-2' }) // -2 exists
+        .mockResolvedValueOnce(null); // -3 doesn't exist
+
+      (prismaMock.$transaction as jest.Mock).mockImplementation(async (callback: any) => {
+        return callback({
+          postTag: {
+            deleteMany: jest.fn().mockResolvedValue({}),
+          },
+          post: {
+            update: jest.fn().mockResolvedValue({
+              ...existingPost,
+              title: 'Test Post',
+              slug: 'test-post-3',
+              updatedAt: new Date(),
+              author: { id: activeUserId, username: 'activeuser' },
+              category: null,
+              tags: [],
+            }),
+          },
+        });
+      });
+
+      (prismaMock.postLike.count as jest.Mock).mockResolvedValue(0);
+
+      const response = await request(app)
+        .put(`/api/posts/${postId}`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          title: 'Test Post',
+          content: '# Updated Content',
+        })
+        .expect(200);
+
+      expect(response.body.post.slug).toBe('test-post-3');
+    });
+
+    it('should not conflict with own slug when updating title', async () => {
+      const postId = 'post-to-update';
+      const existingPost = {
+        id: postId,
+        title: 'My Post',
+        content: '# Content',
+        slug: 'my-post',
+        published: true,
+        featured: false,
+        createdAt: new Date('2024-01-01'),
+        updatedAt: new Date('2024-01-01'),
+        authorId: activeUserId,
+        categoryId: null,
+        viewCount: 0,
+      };
+
+      // Mock: existing post check
+      (prismaMock.post.findUnique as jest.Mock)
+        .mockResolvedValueOnce(existingPost) // For existing post check
+        .mockResolvedValueOnce({ id: postId }); // For slug collision check (same post, should be excluded)
+
+      (prismaMock.$transaction as jest.Mock).mockImplementation(async (callback: any) => {
+        return callback({
+          postTag: {
+            deleteMany: jest.fn().mockResolvedValue({}),
+          },
+          post: {
+            update: jest.fn().mockResolvedValue({
+              ...existingPost,
+              title: 'My Post',
+              slug: 'my-post', // Same slug (excluded from collision check)
+              updatedAt: new Date(),
+              author: { id: activeUserId, username: 'activeuser' },
+              category: null,
+              tags: [],
+            }),
+          },
+        });
+      });
+
+      (prismaMock.postLike.count as jest.Mock).mockResolvedValue(0);
+
+      const response = await request(app)
+        .put(`/api/posts/${postId}`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          title: 'My Post', // Same title, same slug
+          content: '# Updated Content',
+        })
+        .expect(200);
+
+      expect(response.body.post.slug).toBe('my-post');
+    });
+
+    it('should keep same slug when title does not change', async () => {
+      const postId = 'post-to-update';
+      const existingPost = {
+        id: postId,
+        title: 'My Post',
+        content: '# Content',
+        slug: 'my-post',
+        published: true,
+        featured: false,
+        createdAt: new Date('2024-01-01'),
+        updatedAt: new Date('2024-01-01'),
+        authorId: activeUserId,
+        categoryId: null,
+        viewCount: 0,
+      };
+
+      (prismaMock.post.findUnique as jest.Mock).mockResolvedValueOnce(existingPost);
+
+      (prismaMock.$transaction as jest.Mock).mockImplementation(async (callback: any) => {
+        return callback({
+          postTag: {
+            deleteMany: jest.fn().mockResolvedValue({}),
+          },
+          post: {
+            update: jest.fn().mockResolvedValue({
+              ...existingPost,
+              content: '# Updated Content',
+              featured: true,
+              slug: 'my-post', // Same slug (title didn't change)
+              updatedAt: new Date(),
+              author: { id: activeUserId, username: 'activeuser' },
+              category: null,
+              tags: [],
+            }),
+          },
+        });
+      });
+
+      (prismaMock.postLike.count as jest.Mock).mockResolvedValue(0);
+
+      const response = await request(app)
+        .put(`/api/posts/${postId}`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          title: 'My Post', // Same title
+          content: '# Updated Content',
+          featured: true,
+        })
+        .expect(200);
+
+      expect(response.body.post.slug).toBe('my-post');
+    });
+  });
 });
 
