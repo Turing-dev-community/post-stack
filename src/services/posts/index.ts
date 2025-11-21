@@ -21,7 +21,7 @@ export {
 } from "./postsQueryService";
 
 // Export CRUD services
-export { createPost, updatePost, deletePost } from "./postsCrudService";
+export { createPost, updatePost, deletePost, bulkCreatePosts, schedulePost, unschedulePost } from "./postsCrudService";
 
 // Export interaction services
 export {
