@@ -39,6 +39,74 @@ export const generateToken = (userId: string): string => {
   });
 };
 
+export const generateAccessToken = (userId: string): string => {
+  return jwt.sign({ userId }, process.env.JWT_SECRET!, {
+    expiresIn: '15m', 
+  });
+};
+
+export const generateRefreshToken = async (userId: string): Promise<string> => {
+  const token = jwt.sign({ userId }, process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET!, {
+    expiresIn: '7d',
+  });
+
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + 7);
+
+  await prisma.refreshToken.create({
+    data: {
+      token,
+      userId,
+      expiresAt,
+    },
+  });
+
+  return token;
+};
+
+export const verifyRefreshToken = async (token: string): Promise<string | null> => {
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET!) as { userId: string };
+
+    const refreshToken = await prisma.refreshToken.findUnique({
+      where: { token },
+    });
+
+    if (!refreshToken || refreshToken.expiresAt < new Date()) {
+      if (refreshToken) {
+        await prisma.refreshToken.delete({ where: { token } });
+      }
+      return null;
+    }
+
+    return decoded.userId;
+  } catch (error) {
+    return null;
+  }
+};
+
+export const revokeRefreshToken = async (token: string): Promise<void> => {
+  await prisma.refreshToken.deleteMany({
+    where: { token },
+  });
+};
+
+export const revokeAllUserRefreshTokens = async (userId: string): Promise<void> => {
+  await prisma.refreshToken.deleteMany({
+    where: { userId },
+  });
+};
+
+export const cleanupExpiredTokens = async (): Promise<void> => {
+  await prisma.refreshToken.deleteMany({
+    where: {
+      expiresAt: {
+        lt: new Date(),
+      },
+    },
+  });
+};
+
 export const hashPassword = async (password: string): Promise<string> => {
   const saltRounds = 12;
   return bcrypt.hash(password, saltRounds);

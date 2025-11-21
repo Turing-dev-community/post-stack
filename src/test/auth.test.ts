@@ -3,7 +3,8 @@ import { setupPrismaMock } from "./utils/mockPrisma";
 import { prisma } from "../lib/prisma";
 import app from "../index";
 import bcrypt from "bcryptjs";
-import { generateToken } from "../utils/auth";
+import { generateToken, generateAccessToken, generateRefreshToken } from "../utils/auth";
+import jwt from "jsonwebtoken";
 
 const { prisma: prismaMock } = setupPrismaMock(prisma, app);
 
@@ -26,6 +27,13 @@ describe("Authentication Routes (mocked)", () => {
 			(prismaMock.user.create as unknown as jest.Mock).mockResolvedValue(
 				created
 			);
+			(prismaMock.refreshToken.create as unknown as jest.Mock).mockResolvedValue({
+				id: "token-1",
+				token: "refresh-token",
+				userId: "user-1",
+				expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+				createdAt: new Date(),
+			});
 
 			const response = await request(app)
 				.post("/api/auth/signup")
@@ -42,7 +50,8 @@ describe("Authentication Routes (mocked)", () => {
 			);
 			expect(response.body).toHaveProperty("user");
 			expect(response.body.user.email).toBe("test@example.com");
-			expect(response.body).toHaveProperty("token");
+			expect(response.body).toHaveProperty("accessToken");
+			expect(response.body).toHaveProperty("refreshToken");
 		});
 
 		it("should return error if email already exists", async () => {
@@ -142,6 +151,13 @@ describe("Authentication Routes (mocked)", () => {
 				username: "testuser",
 				password: hashed,
 			});
+			(prismaMock.refreshToken.create as unknown as jest.Mock).mockResolvedValue({
+				id: "token-1",
+				token: "refresh-token",
+				userId: "user-1",
+				expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+				createdAt: new Date(),
+			});
 
 			const response = await request(app)
 				.post("/api/auth/login")
@@ -150,7 +166,8 @@ describe("Authentication Routes (mocked)", () => {
 
 			expect(response.body).toHaveProperty("message", "Login successful");
 			expect(response.body).toHaveProperty("user");
-			expect(response.body).toHaveProperty("token");
+			expect(response.body).toHaveProperty("accessToken");
+			expect(response.body).toHaveProperty("refreshToken");
 			expect(response.body.user.username).toBe("testuser");
 		});
 
@@ -205,6 +222,13 @@ describe("Authentication Routes (mocked)", () => {
 				username: "trimlogin",
 				password: hashedPassword,
 				deletedAt: null,
+			});
+			(prismaMock.refreshToken.create as unknown as jest.Mock).mockResolvedValue({
+				id: "token-2",
+				token: "refresh-token",
+				userId: "user-2",
+				expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+				createdAt: new Date(),
 			});
 
 			const response = await request(app)
@@ -610,6 +634,13 @@ describe("Authentication Routes (mocked)", () => {
 				username: "testuser",
 				deletedAt: null,
 			});
+			(prismaMock.refreshToken.create as unknown as jest.Mock).mockResolvedValue({
+				id: "token-1",
+				token: "refresh-token",
+				userId,
+				expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+				createdAt: new Date(),
+			});
 
 			const response = await request(app)
 				.post("/api/auth/reactivate")
@@ -621,7 +652,8 @@ describe("Authentication Routes (mocked)", () => {
 			expect(response.body.user).toHaveProperty("id", userId);
 			expect(response.body.user).toHaveProperty("email", email);
 			expect(response.body.user).toHaveProperty("username", "testuser");
-			expect(response.body).toHaveProperty("token");
+			expect(response.body).toHaveProperty("accessToken");
+			expect(response.body).toHaveProperty("refreshToken");
 		});
 
 		it("should return error for invalid email format", async () => {
@@ -738,6 +770,13 @@ describe("Authentication Routes (mocked)", () => {
 				username: "testuser",
 				deletedAt: null,
 			});
+			(prismaMock.refreshToken.create as unknown as jest.Mock).mockResolvedValue({
+				id: "token-1",
+				token: "refresh-token",
+				userId,
+				expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+				createdAt: new Date(),
+			});
 
 			// Reactivate account
 			const reactivateResponse = await request(app)
@@ -752,7 +791,7 @@ describe("Authentication Routes (mocked)", () => {
 				.post("/api/auth/login")
 				.send({ email, password })
 				.expect(200);
-
+			
 			expect(loginResponse.body).toHaveProperty("message", "Login successful");
 		});
 
@@ -785,6 +824,13 @@ describe("Authentication Routes (mocked)", () => {
 				username: "testuser",
 				deletedAt: null,
 			});
+			(prismaMock.refreshToken.create as unknown as jest.Mock).mockResolvedValue({
+				id: "token-1",
+				token: "refresh-token",
+				userId,
+				expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+				createdAt: new Date(),
+			});
 
 			// Reactivate account
 			const reactivateResponse = await request(app)
@@ -792,8 +838,8 @@ describe("Authentication Routes (mocked)", () => {
 				.send({ email, password })
 				.expect(200);
 
-			const token = reactivateResponse.body.token;
-
+			const token = reactivateResponse.body.accessToken;
+			
 			// Try to access protected route
 			const profileResponse = await request(app)
 				.get("/api/profile")
@@ -801,6 +847,178 @@ describe("Authentication Routes (mocked)", () => {
 				.expect(200);
 
 			expect(profileResponse.body).toHaveProperty("user");
+		});
+	});
+
+	describe("POST /api/auth/refresh", () => {
+		it("should refresh access token with valid refresh token", async () => {
+			const userId = "user-1";
+			const refreshToken = jwt.sign(
+				{ userId },
+				process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET!,
+				{ expiresIn: "7d" }
+			);
+
+			(prismaMock.refreshToken.findUnique as unknown as jest.Mock).mockResolvedValue({
+				id: "token-1",
+				token: refreshToken,
+				userId,
+				expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+				createdAt: new Date(),
+			});
+
+			(prismaMock.user.findUnique as unknown as jest.Mock).mockResolvedValue({
+				id: userId,
+				email: "test@example.com",
+				username: "testuser",
+				deletedAt: null,
+			});
+
+			const response = await request(app)
+				.post("/api/auth/refresh")
+				.send({ refreshToken })
+				.expect(200);
+
+			expect(response.body).toHaveProperty("message", "Access token refreshed successfully");
+			expect(response.body).toHaveProperty("accessToken");
+		});
+
+		it("should return error for missing refresh token", async () => {
+			const response = await request(app)
+				.post("/api/auth/refresh")
+				.send({})
+				.expect(400);
+
+			expect(response.body).toHaveProperty("error", "Refresh token required");
+		});
+
+		it("should return error for invalid refresh token", async () => {
+			(prismaMock.refreshToken.findUnique as unknown as jest.Mock).mockResolvedValue(null);
+
+			const response = await request(app)
+				.post("/api/auth/refresh")
+				.send({ refreshToken: "invalid-token" })
+				.expect(403);
+
+			expect(response.body).toHaveProperty("error", "Invalid or expired refresh token");
+		});
+
+		it("should return error for expired refresh token", async () => {
+			const userId = "user-1";
+			const refreshToken = jwt.sign(
+				{ userId },
+				process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET!,
+				{ expiresIn: "7d" }
+			);
+
+			(prismaMock.refreshToken.findUnique as unknown as jest.Mock).mockResolvedValue({
+				id: "token-1",
+				token: refreshToken,
+				userId,
+				expiresAt: new Date(Date.now() - 1000),
+				createdAt: new Date(),
+			});
+
+			(prismaMock.refreshToken.delete as unknown as jest.Mock).mockResolvedValue({});
+
+			const response = await request(app)
+				.post("/api/auth/refresh")
+				.send({ refreshToken })
+				.expect(403);
+
+			expect(response.body).toHaveProperty("error", "Invalid or expired refresh token");
+		});
+
+		it("should return error when user is deactivated", async () => {
+			const userId = "user-1";
+			const refreshToken = jwt.sign(
+				{ userId },
+				process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET!,
+				{ expiresIn: "7d" }
+			);
+
+			(prismaMock.refreshToken.findUnique as unknown as jest.Mock).mockResolvedValue({
+				id: "token-1",
+				token: refreshToken,
+				userId,
+				expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+				createdAt: new Date(),
+			});
+
+			(prismaMock.user.findUnique as unknown as jest.Mock).mockResolvedValue({
+				id: userId,
+				email: "test@example.com",
+				username: "testuser",
+				deletedAt: new Date(),
+			});
+
+			const response = await request(app)
+				.post("/api/auth/refresh")
+				.send({ refreshToken })
+				.expect(403);
+
+			expect(response.body).toHaveProperty("error", "Account has been deactivated");
+		});
+	});
+
+	describe("POST /api/auth/logout", () => {
+		it("should logout successfully with valid refresh token", async () => {
+			const refreshToken = "valid-refresh-token";
+
+			(prismaMock.refreshToken.deleteMany as unknown as jest.Mock).mockResolvedValue({ count: 1 });
+
+			const response = await request(app)
+				.post("/api/auth/logout")
+				.send({ refreshToken })
+				.expect(200);
+
+			expect(response.body).toHaveProperty("message", "Logged out successfully");
+			expect(prismaMock.refreshToken.deleteMany).toHaveBeenCalledWith({
+				where: { token: refreshToken },
+			});
+		});
+
+		it("should return error when refresh token is missing", async () => {
+			const response = await request(app)
+				.post("/api/auth/logout")
+				.send({})
+				.expect(400);
+
+			expect(response.body).toHaveProperty("error", "Refresh token required");
+		});
+	});
+
+	describe("POST /api/auth/logout-all", () => {
+		it("should logout from all devices when authenticated", async () => {
+			const userId = "user-1";
+
+			(prismaMock.user.findUnique as unknown as jest.Mock).mockResolvedValue({
+				id: userId,
+				email: "test@example.com",
+				username: "testuser",
+				deletedAt: null,
+			});
+
+			(prismaMock.refreshToken.deleteMany as unknown as jest.Mock).mockResolvedValue({ count: 3 });
+
+			const token = generateAccessToken(userId);
+			const response = await request(app)
+				.post("/api/auth/logout-all")
+				.set("Authorization", `Bearer ${token}`)
+				.expect(200);
+
+			expect(response.body).toHaveProperty("message", "Logged out from all devices successfully");
+			expect(prismaMock.refreshToken.deleteMany).toHaveBeenCalledWith({
+				where: { userId },
+			});
+		});
+
+		it("should return error when not authenticated", async () => {
+			const response = await request(app)
+				.post("/api/auth/logout-all")
+				.expect(401);
+
+			expect(response.body).toHaveProperty("error", "Access token required");
 		});
 	});
 });
