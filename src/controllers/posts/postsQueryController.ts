@@ -1,6 +1,6 @@
 import { Response } from 'express';
 import { AuthRequest } from '../../utils/auth';
-import * as postsService from '../../services/postsService';
+import * as postsService from '../../services/posts';
 
 /**
  * Get all published posts with pagination, filtering, and sorting
