@@ -5,7 +5,7 @@ import { handleValidationErrors, asyncHandler } from '../middleware/validation';
 import { AuthRequest } from '../utils/auth';
 import { cacheMiddleware } from '../middleware/cache';
 import { CACHE_CONFIG } from '../constants/cache';
-import * as postsController from '../controllers/postsController';
+import * as postsController from '../controllers/posts';
 import { getRecentComments } from '../controllers/commentsController';
 import { requireAuthor } from '../middleware/authorization';
 import { reportPost } from '../controllers/reportsController';
