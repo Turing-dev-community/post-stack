@@ -139,3 +139,139 @@ export async function getFollowing(userId: string, page: number, limit: number) 
     limit,
   };
 }
+
+export async function getUserActivity(userId: string, page: number, limit: number) {
+  const skip = (page - 1) * limit;
+
+  // Check if user exists
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, deletedAt: true },
+  });
+
+  if (!user || user.deletedAt) {
+    throw new Error('User not found');
+  }
+
+  // Fetch user's posts and comments in parallel
+  const [posts, comments, postsCount, commentsCount] = await Promise.all([
+    prisma.post.findMany({
+      where: {
+        authorId: userId,
+        published: true,
+      },
+      include: {
+        author: {
+          select: {
+            id: true,
+            username: true,
+          },
+        },
+        category: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+          },
+        },
+        tags: {
+          include: {
+            tag: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    }),
+    prisma.comment.findMany({
+      where: {
+        userId,
+        post: {
+          published: true,
+        },
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            username: true,
+          },
+        },
+        post: {
+          select: {
+            id: true,
+            title: true,
+            slug: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    }),
+    prisma.post.count({
+      where: {
+        authorId: userId,
+        published: true,
+      },
+    }),
+    prisma.comment.count({
+      where: {
+        userId,
+        post: {
+          published: true,
+        },
+      },
+    }),
+  ]);
+
+  // Transform posts to activity items
+  const postActivities = posts.map((post) => ({
+    type: 'post' as const,
+    id: post.id,
+    title: post.title,
+    slug: post.slug,
+    content: post.content,
+    published: post.published,
+    featured: post.featured,
+    createdAt: post.createdAt,
+    updatedAt: post.updatedAt,
+    author: post.author,
+    category: post.category,
+    tags: post.tags.map((postTag: any) => postTag.tag),
+    viewCount: post.viewCount,
+  }));
+
+  // Transform comments to activity items
+  const commentActivities = comments.map((comment) => ({
+    type: 'comment' as const,
+    id: comment.id,
+    content: comment.content,
+    postId: comment.postId,
+    createdAt: comment.createdAt,
+    updatedAt: comment.updatedAt,
+    user: comment.user,
+    post: comment.post,
+  }));
+
+  // Merge and sort by createdAt (newest first)
+  const allActivities = [...postActivities, ...commentActivities].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+
+  // Apply pagination
+  const paginatedActivities = allActivities.slice(skip, skip + limit);
+  const total = postsCount + commentsCount;
+
+  return {
+    activities: paginatedActivities,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+    },
+  };
+}
