@@ -275,6 +275,24 @@ yarn setup:test  # First time setup
 yarn test
 ```
 
+### Test Coverage
+
+To get the coverage of the tests, run:
+```bash
+yarn test --coverage
+```
+
+This runs all test in the repository and gives you a breakdown of the coverage in a table-like format in 4 main categories:
+- Stmts
+- Branch
+- Funcs
+- Lines
+
+The average test coverage of the repository can be calculated by taking an average of the percentages of the 4 categories outlined above
+
+#### Test Coverage Sample
+[!Test Coverage Snapshot](./test_coverage.png)
+
 ## Project Structure
 
 ```
