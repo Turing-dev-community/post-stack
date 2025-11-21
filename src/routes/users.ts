@@ -1,10 +1,19 @@
 import { Router } from 'express';
 import { authenticateToken } from '../utils/auth';
-import { followUser, unfollowUser, getFollowers, getFollowing } from '../controllers/usersController';
+import { followUser, unfollowUser, getFollowers, getFollowing, getUserPublicProfile } from '../controllers/usersController';
 import { validatePagination } from '../middleware/validators';
 import { handleValidationErrors } from '../middleware/validation';
+import { cacheMiddleware } from '../middleware/cache';
+import { CACHE_CONFIG } from '../constants/cache';
 
 const router = Router();
+
+// Public endpoint to view any user's profile
+router.get(
+  '/:userId/profile',
+  cacheMiddleware(CACHE_CONFIG.TTL_DEFAULT),
+  getUserPublicProfile
+);
 
 router.post(
   '/:userId/follow',

@@ -1,7 +1,7 @@
 import { Response } from 'express';
 import { AuthRequest } from '../utils/auth';
 import { asyncHandler } from '../middleware/validation';
-import { followUser as followUserService, unfollowUser as unfollowUserService, getFollowers as getFollowersService, getFollowing as getFollowingService } from '../services/usersService';
+import { followUser as followUserService, unfollowUser as unfollowUserService, getFollowers as getFollowersService, getFollowing as getFollowingService, getUserPublicProfile as getUserPublicProfileService } from '../services/usersService';
 
 export const followUser = asyncHandler(async (req: AuthRequest, res: Response) => {
   if (!req.user) {
@@ -103,4 +103,21 @@ export const getFollowing = asyncHandler(async (req: AuthRequest, res: Response)
     page: result.page,
     limit: result.limit,
   });
+});
+
+export const getUserPublicProfile = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { userId } = req.params;
+
+  try {
+    const profile = await getUserPublicProfileService(userId);
+    return res.json(profile);
+  } catch (error: any) {
+    if (error.message === 'User not found') {
+      return res.status(404).json({
+        error: 'User not found',
+        message: 'This user account does not exist or has been deactivated.',
+      });
+    }
+    throw error;
+  }
 });

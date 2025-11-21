@@ -1,6 +1,7 @@
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import { setupPrismaMock } from './utils/mockPrisma';
+import { invalidateCache } from '../middleware/cache';
 // Import prisma and app AFTER mocks are set up
 import { prisma } from '../lib/prisma';
 import app from '../index';
@@ -312,6 +313,256 @@ describe('User Followers Routes', () => {
 
       expect(response.body.following).toHaveLength(0);
       expect(response.body.total).toBe(0);
+    });
+  });
+
+  describe('GET /api/users/:userId/profile', () => {
+    beforeEach(() => {
+      // Clear cache before each test to avoid interference
+      invalidateCache.invalidateAll();
+    });
+
+    it('should return user public profile with all fields', async () => {
+      const testUserId = 'profile-user-1';
+      const createdAt = new Date('2024-01-15T10:00:00.000Z');
+      const mockUser = {
+        id: testUserId,
+        username: 'testuser',
+        profilePicture: 'https://example.com/avatar.jpg',
+        about: 'Software developer and blogger',
+        createdAt,
+        deletedAt: null,
+      };
+
+      // Mock: Get user
+      (prismaMock.user.findUnique as jest.Mock).mockImplementation((args: any) => {
+        if (args?.where?.id === testUserId) {
+          return Promise.resolve(mockUser);
+        }
+        return Promise.resolve(null);
+      });
+
+      // Mock: Count published posts
+      (prismaMock.post.count as jest.Mock).mockImplementation(() => Promise.resolve(42));
+
+      // Mock: Count followers and following
+      (prismaMock.follow.count as jest.Mock)
+        .mockImplementationOnce(() => Promise.resolve(150))
+        .mockImplementationOnce(() => Promise.resolve(75));
+
+      const response = await request(app)
+        .get(`/api/users/${testUserId}/profile`)
+        .expect(200);
+
+      expect(response.body).toHaveProperty('id', testUserId);
+      expect(response.body).toHaveProperty('username', 'testuser');
+      expect(response.body).toHaveProperty('profilePicture', 'https://example.com/avatar.jpg');
+      expect(response.body).toHaveProperty('about', 'Software developer and blogger');
+      expect(response.body).toHaveProperty('createdAt');
+      expect(response.body).toHaveProperty('postsCount', 42);
+      expect(response.body).toHaveProperty('followerCount', 150);
+      expect(response.body).toHaveProperty('followingCount', 75);
+
+      // Verify Prisma was called correctly
+      expect(prismaMock.user.findUnique).toHaveBeenCalledWith({
+        where: { id: testUserId },
+        select: {
+          id: true,
+          username: true,
+          profilePicture: true,
+          about: true,
+          createdAt: true,
+          deletedAt: true,
+        },
+      });
+
+      expect(prismaMock.post.count).toHaveBeenCalledWith({
+        where: {
+          authorId: testUserId,
+          published: true,
+        },
+      });
+
+      expect(prismaMock.follow.count).toHaveBeenCalledWith({
+        where: { followingId: testUserId },
+      });
+
+      expect(prismaMock.follow.count).toHaveBeenCalledWith({
+        where: { followerId: testUserId },
+      });
+    });
+
+    it('should return profile with null optional fields', async () => {
+      const testUserId = 'profile-user-2';
+      const createdAt = new Date('2024-01-15T10:00:00.000Z');
+      const mockUser = {
+        id: testUserId,
+        username: 'testuser',
+        profilePicture: null,
+        about: null,
+        createdAt,
+        deletedAt: null,
+      };
+
+      // Mock: Get user
+      (prismaMock.user.findUnique as jest.Mock).mockImplementation((args: any) => {
+        if (args?.where?.id === testUserId) {
+          return Promise.resolve(mockUser);
+        }
+        return Promise.resolve(null);
+      });
+
+      // Mock: Counts
+      (prismaMock.post.count as jest.Mock).mockImplementation(() => Promise.resolve(0));
+      (prismaMock.follow.count as jest.Mock)
+        .mockImplementationOnce(() => Promise.resolve(0))
+        .mockImplementationOnce(() => Promise.resolve(0));
+
+      const response = await request(app)
+        .get(`/api/users/${testUserId}/profile`)
+        .expect(200);
+
+      expect(response.body.profilePicture).toBeNull();
+      expect(response.body.about).toBeNull();
+      expect(response.body.postsCount).toBe(0);
+      expect(response.body.followerCount).toBe(0);
+      expect(response.body.followingCount).toBe(0);
+    });
+
+    it('should return 404 when user does not exist', async () => {
+      const nonExistentUserId = 'non-existent-user';
+
+      // Mock: User not found
+      (prismaMock.user.findUnique as jest.Mock).mockImplementation(() => Promise.resolve(null));
+
+      const response = await request(app)
+        .get(`/api/users/${nonExistentUserId}/profile`)
+        .expect(404);
+
+      expect(response.body.error).toBe('User not found');
+      expect(response.body.message).toBe('This user account does not exist or has been deactivated.');
+
+      // Verify counts were not called
+      expect(prismaMock.post.count).not.toHaveBeenCalled();
+      expect(prismaMock.follow.count).not.toHaveBeenCalled();
+    });
+
+    it('should return 404 when user is deleted', async () => {
+      const testUserId = 'profile-user-3';
+      const createdAt = new Date('2024-01-15T10:00:00.000Z');
+      const deletedAt = new Date('2024-01-20T10:00:00.000Z');
+      const mockUser = {
+        id: testUserId,
+        username: 'deleteduser',
+        profilePicture: null,
+        about: null,
+        createdAt,
+        deletedAt,
+      };
+
+      // Mock: Get deleted user
+      (prismaMock.user.findUnique as jest.Mock).mockImplementation((args: any) => {
+        if (args?.where?.id === testUserId) {
+          return Promise.resolve(mockUser);
+        }
+        return Promise.resolve(null);
+      });
+
+      // Ensure counts are not called by not mocking them
+      (prismaMock.post.count as jest.Mock).mockImplementation(() => Promise.resolve(0));
+      (prismaMock.follow.count as jest.Mock).mockImplementation(() => Promise.resolve(0));
+
+      const response = await request(app)
+        .get(`/api/users/${testUserId}/profile`)
+        .expect(404);
+
+      expect(response.body.error).toBe('User not found');
+      expect(response.body.message).toBe('This user account does not exist or has been deactivated.');
+
+      // Verify counts were not called (service should return early when user is deleted)
+      expect(prismaMock.post.count).not.toHaveBeenCalled();
+      expect(prismaMock.follow.count).not.toHaveBeenCalled();
+    });
+
+    it('should only count published posts', async () => {
+      const testUserId = 'profile-user-4';
+      const createdAt = new Date('2024-01-15T10:00:00.000Z');
+      const mockUser = {
+        id: testUserId,
+        username: 'testuser',
+        profilePicture: null,
+        about: null,
+        createdAt,
+        deletedAt: null,
+      };
+
+      // Mock: Get user
+      (prismaMock.user.findUnique as jest.Mock).mockImplementation((args: any) => {
+        if (args?.where?.id === testUserId) {
+          return Promise.resolve(mockUser);
+        }
+        return Promise.resolve(null);
+      });
+
+      // Mock: Count published posts (should only count published: true)
+      (prismaMock.post.count as jest.Mock).mockImplementation(() => Promise.resolve(10));
+
+      // Mock: Counts
+      (prismaMock.follow.count as jest.Mock)
+        .mockImplementationOnce(() => Promise.resolve(5))
+        .mockImplementationOnce(() => Promise.resolve(3));
+
+      const response = await request(app)
+        .get(`/api/users/${testUserId}/profile`)
+        .expect(200);
+
+      expect(response.body.postsCount).toBe(10);
+
+      // Verify post count was called with published: true
+      expect(prismaMock.post.count).toHaveBeenCalledWith({
+        where: {
+          authorId: testUserId,
+          published: true,
+        },
+      });
+    });
+
+    it('should be accessible without authentication', async () => {
+      const testUserId = 'profile-user-5';
+      const createdAt = new Date('2024-01-15T10:00:00.000Z');
+      const mockUser = {
+        id: testUserId,
+        username: 'publicuser',
+        profilePicture: null,
+        about: null,
+        createdAt,
+        deletedAt: null,
+      };
+
+      // Mock: Get user
+      (prismaMock.user.findUnique as jest.Mock).mockImplementation((args: any) => {
+        if (args?.where?.id === testUserId) {
+          return Promise.resolve(mockUser);
+        }
+        return Promise.resolve(null);
+      });
+
+      // Mock: Counts
+      (prismaMock.post.count as jest.Mock).mockImplementation(() => Promise.resolve(0));
+      (prismaMock.follow.count as jest.Mock)
+        .mockImplementationOnce(() => Promise.resolve(0))
+        .mockImplementationOnce(() => Promise.resolve(0));
+
+      // Request without authentication token
+      const response = await request(app)
+        .get(`/api/users/${testUserId}/profile`)
+        .expect(200);
+
+      expect(response.body).toHaveProperty('id');
+      expect(response.body).toHaveProperty('username');
+      // Should not include sensitive fields
+      expect(response.body).not.toHaveProperty('email');
+      expect(response.body).not.toHaveProperty('password');
     });
   });
 
