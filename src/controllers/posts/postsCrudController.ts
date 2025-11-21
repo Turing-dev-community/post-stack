@@ -255,3 +255,50 @@ export async function unschedulePost(
 		throw error;
 	}
 }
+
+/**
+ * Create multiple posts in bulk
+ */
+export async function bulkCreatePosts(
+	req: AuthRequest,
+	res: Response
+): Promise<Response> {
+	if (!req.user) {
+		return res.status(401).json({
+			error: "Authentication required",
+		});
+	}
+
+	const { posts } = req.body;
+
+	if (!Array.isArray(posts)) {
+		return res.status(400).json({
+			error: "Posts must be an array",
+		});
+	}
+
+	try {
+		const createdPosts = await postsService.bulkCreatePosts(
+			posts,
+			req.user.id
+		);
+
+		return res.status(201).json({
+			message: `${createdPosts.length} post(s) created successfully`,
+			count: createdPosts.length,
+			posts: createdPosts,
+		});
+	} catch (error: any) {
+		if (
+			error.message === "Posts must be a non-empty array" ||
+			error.message === "Maximum 50 posts allowed per request" ||
+			error.message === "Duplicate post titles are not allowed" ||
+			error.message.includes("Posts with these titles already exist")
+		) {
+			return res.status(400).json({
+				error: error.message,
+			});
+		}
+		throw error;
+	}
+}

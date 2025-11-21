@@ -1,20 +1,15 @@
-import { Router, Response } from "express";
-import { authenticateToken } from "../utils/auth";
-import {
-	validatePost,
-	validateComment,
-	validatePagination,
-	validateCommentSettings,
-} from "../middleware/validators";
-import { handleValidationErrors, asyncHandler } from "../middleware/validation";
-import { AuthRequest } from "../utils/auth";
-import { cacheMiddleware } from "../middleware/cache";
-import { CACHE_CONFIG } from "../constants/cache";
-import * as postsController from "../controllers/posts";
-import { getRecentComments } from "../controllers/commentsController";
-import { requireAuthor } from "../middleware/authorization";
-import { reportPost } from "../controllers/reportsController";
-import { validatePostReport } from "../middleware/validators";
+import { Router, Response } from 'express';
+import { authenticateToken } from '../utils/auth';
+import { validatePost, validateComment, validatePagination, validateCommentSettings, validateBulkPosts } from '../middleware/validators';
+import { handleValidationErrors, asyncHandler } from '../middleware/validation';
+import { AuthRequest } from '../utils/auth';
+import { cacheMiddleware } from '../middleware/cache';
+import { CACHE_CONFIG } from '../constants/cache';
+import * as postsController from '../controllers/posts';
+import { getRecentComments } from '../controllers/commentsController';
+import { requireAuthor } from '../middleware/authorization';
+import { reportPost } from '../controllers/reportsController';
+import { validatePostReport } from '../middleware/validators';
 
 const router = Router();
 
@@ -119,6 +114,11 @@ router.post(
 		postsController.createPost(req, res)
 	)
 );
+
+// Create multiple posts in bulk
+router.post('/bulk', validateBulkPosts, authenticateToken, requireAuthor, handleValidationErrors, asyncHandler(
+  (req: AuthRequest, res: Response) => postsController.bulkCreatePosts(req, res)
+));
 
 // Update post
 router.put(

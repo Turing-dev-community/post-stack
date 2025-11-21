@@ -187,6 +187,87 @@ export async function deletePost(postId: string, userId: string) {
 }
 
 /**
+ * Create multiple posts in bulk
+ */
+export async function bulkCreatePosts(
+	postsData: CreatePostData[],
+	userId: string
+) {
+	if (!Array.isArray(postsData) || postsData.length === 0) {
+		throw new Error("Posts must be a non-empty array");
+	}
+
+	if (postsData.length > 50) {
+		throw new Error("Maximum 50 posts allowed per request");
+	}
+
+	// Check for duplicate slugs before creating
+	const slugs = postsData.map((post) => generateSlug(post.title));
+	const uniqueSlugs = new Set(slugs);
+
+	if (uniqueSlugs.size !== slugs.length) {
+		throw new Error("Duplicate post titles are not allowed");
+	}
+
+	// Check if any slugs already exist
+	const existingPosts = await prisma.post.findMany({
+		where: {
+			slug: {
+				in: slugs,
+			},
+		},
+		select: {
+			slug: true,
+		},
+	});
+
+	if (existingPosts.length > 0) {
+		const existingSlugs = existingPosts.map((p) => p.slug);
+		throw new Error(
+			`Posts with these titles already exist: ${existingSlugs.join(", ")}`
+		);
+	}
+
+	// Create all posts in a transaction
+	const createdPosts = await prisma.$transaction(
+		postsData.map((postData) => {
+			const slug = generateSlug(postData.title);
+
+			return prisma.post.create({
+				data: {
+					title: postData.title,
+					content: postData.content,
+					slug,
+					published: postData.published ?? false,
+					featured: postData.featured ?? false,
+					authorId: userId,
+					categoryId: postData.categoryId,
+					metaTitle: postData.metaTitle,
+					metaDescription: postData.metaDescription,
+					ogImage: postData.ogImage,
+					tags:
+						postData.tags && postData.tags.length > 0
+							? {
+									create: postData.tags.map((tagId: string) => ({
+										tagId,
+									})),
+							  }
+							: undefined,
+				},
+				include: getPostIncludes(),
+			});
+		})
+	);
+
+	invalidateCache.invalidateListCaches();
+	invalidateCache.invalidateUserCaches(userId);
+
+	// Enrich all posts with metadata
+	return await Promise.all(
+		createdPosts.map((post) => enrichPostWithMetadata(post))
+	);
+}
+/*
  * Schedule a post for future publication
  */
 export async function schedulePost(
