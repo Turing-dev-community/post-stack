@@ -153,8 +153,8 @@ export async function getUserActivity(userId: string, page: number, limit: numbe
     throw new Error('User not found');
   }
 
-  // Fetch user's posts and comments in parallel
-  const [posts, comments, postsCount, commentsCount] = await Promise.all([
+  // Fetch user's posts, comments, post likes, and comment likes in parallel
+  const [posts, comments, postLikes, commentLikes, postsCount, commentsCount, postLikesCount, commentLikesCount] = await Promise.all([
     prisma.post.findMany({
       where: {
         authorId: userId,
@@ -211,6 +211,67 @@ export async function getUserActivity(userId: string, page: number, limit: numbe
       },
       orderBy: { createdAt: 'desc' },
     }),
+    prisma.postLike.findMany({
+      where: {
+        userId,
+        post: {
+          published: true,
+        },
+      },
+      include: {
+        post: {
+          select: {
+            id: true,
+            title: true,
+            slug: true,
+            author: {
+              select: {
+                id: true,
+                username: true,
+              },
+            },
+            category: {
+              select: {
+                id: true,
+                name: true,
+                slug: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    }),
+    prisma.commentLike.findMany({
+      where: {
+        userId,
+        comment: {
+          post: {
+            published: true,
+          },
+        },
+      },
+      include: {
+        comment: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                username: true,
+              },
+            },
+            post: {
+              select: {
+                id: true,
+                title: true,
+                slug: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    }),
     prisma.post.count({
       where: {
         authorId: userId,
@@ -222,6 +283,24 @@ export async function getUserActivity(userId: string, page: number, limit: numbe
         userId,
         post: {
           published: true,
+        },
+      },
+    }),
+    prisma.postLike.count({
+      where: {
+        userId,
+        post: {
+          published: true,
+        },
+      },
+    }),
+    prisma.commentLike.count({
+      where: {
+        userId,
+        comment: {
+          post: {
+            published: true,
+          },
         },
       },
     }),
@@ -256,14 +335,48 @@ export async function getUserActivity(userId: string, page: number, limit: numbe
     post: comment.post,
   }));
 
+  // Transform post likes to activity items
+  const postLikeActivities = postLikes.map((postLike) => ({
+    type: 'post_like' as const,
+    id: postLike.id,
+    postId: postLike.postId,
+    createdAt: postLike.createdAt,
+    post: {
+      id: postLike.post.id,
+      title: postLike.post.title,
+      slug: postLike.post.slug,
+      author: postLike.post.author,
+      category: postLike.post.category,
+    },
+  }));
+
+  // Transform comment likes to activity items
+  const commentLikeActivities = commentLikes.map((commentLike) => ({
+    type: 'comment_like' as const,
+    id: commentLike.id,
+    commentId: commentLike.commentId,
+    createdAt: commentLike.createdAt,
+    comment: {
+      id: commentLike.comment.id,
+      content: commentLike.comment.content,
+      user: commentLike.comment.user,
+    },
+    post: commentLike.comment.post,
+  }));
+
   // Merge and sort by createdAt (newest first)
-  const allActivities = [...postActivities, ...commentActivities].sort(
+  const allActivities = [
+    ...postActivities,
+    ...commentActivities,
+    ...postLikeActivities,
+    ...commentLikeActivities,
+  ].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   );
 
   // Apply pagination
   const paginatedActivities = allActivities.slice(skip, skip + limit);
-  const total = postsCount + commentsCount;
+  const total = postsCount + commentsCount + postLikesCount + commentLikesCount;
 
   return {
     activities: paginatedActivities,

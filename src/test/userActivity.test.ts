@@ -88,8 +88,12 @@ describe('User Activity Feed API', () => {
       (prismaMock.user.findUnique as jest.Mock).mockResolvedValue(mockUser);
       (prismaMock.post.findMany as jest.Mock).mockResolvedValue(mockPosts);
       (prismaMock.comment.findMany as jest.Mock).mockResolvedValue(mockComments);
+      (prismaMock.postLike.findMany as jest.Mock).mockResolvedValue([]);
+      (prismaMock.commentLike.findMany as jest.Mock).mockResolvedValue([]);
       (prismaMock.post.count as jest.Mock).mockResolvedValue(1);
       (prismaMock.comment.count as jest.Mock).mockResolvedValue(1);
+      (prismaMock.postLike.count as jest.Mock).mockResolvedValue(0);
+      (prismaMock.commentLike.count as jest.Mock).mockResolvedValue(0);
 
       const res = await request(app)
         .get(`/api/users/${userId}/activity`)
@@ -130,8 +134,12 @@ describe('User Activity Feed API', () => {
       (prismaMock.user.findUnique as jest.Mock).mockResolvedValue(mockUser);
       (prismaMock.post.findMany as jest.Mock).mockResolvedValue(mockPosts);
       (prismaMock.comment.findMany as jest.Mock).mockResolvedValue(mockComments);
+      (prismaMock.postLike.findMany as jest.Mock).mockResolvedValue([]);
+      (prismaMock.commentLike.findMany as jest.Mock).mockResolvedValue([]);
       (prismaMock.post.count as jest.Mock).mockResolvedValue(2);
       (prismaMock.comment.count as jest.Mock).mockResolvedValue(1);
+      (prismaMock.postLike.count as jest.Mock).mockResolvedValue(0);
+      (prismaMock.commentLike.count as jest.Mock).mockResolvedValue(0);
 
       const res = await request(app)
         .get(`/api/users/${userId}/activity?limit=50`)
@@ -188,8 +196,12 @@ describe('User Activity Feed API', () => {
       (prismaMock.user.findUnique as jest.Mock).mockResolvedValue(mockUser);
       (prismaMock.post.findMany as jest.Mock).mockResolvedValue(mockPosts);
       (prismaMock.comment.findMany as jest.Mock).mockResolvedValue([]);
+      (prismaMock.postLike.findMany as jest.Mock).mockResolvedValue([]);
+      (prismaMock.commentLike.findMany as jest.Mock).mockResolvedValue([]);
       (prismaMock.post.count as jest.Mock).mockResolvedValue(1);
       (prismaMock.comment.count as jest.Mock).mockResolvedValue(0);
+      (prismaMock.postLike.count as jest.Mock).mockResolvedValue(0);
+      (prismaMock.commentLike.count as jest.Mock).mockResolvedValue(0);
 
       await request(app)
         .get(`/api/users/${testUserId}/activity`)
@@ -222,8 +234,12 @@ describe('User Activity Feed API', () => {
       (prismaMock.user.findUnique as jest.Mock).mockResolvedValue(mockUser);
       (prismaMock.post.findMany as jest.Mock).mockResolvedValue([]);
       (prismaMock.comment.findMany as jest.Mock).mockResolvedValue(mockComments);
+      (prismaMock.postLike.findMany as jest.Mock).mockResolvedValue([]);
+      (prismaMock.commentLike.findMany as jest.Mock).mockResolvedValue([]);
       (prismaMock.post.count as jest.Mock).mockResolvedValue(0);
       (prismaMock.comment.count as jest.Mock).mockResolvedValue(1);
+      (prismaMock.postLike.count as jest.Mock).mockResolvedValue(0);
+      (prismaMock.commentLike.count as jest.Mock).mockResolvedValue(0);
 
       await request(app)
         .get(`/api/users/${testUserId}/activity`)
@@ -264,8 +280,12 @@ describe('User Activity Feed API', () => {
       (prismaMock.user.findUnique as jest.Mock).mockResolvedValue(mockUser);
       (prismaMock.post.findMany as jest.Mock).mockResolvedValue(mockPosts);
       (prismaMock.comment.findMany as jest.Mock).mockResolvedValue(mockComments);
+      (prismaMock.postLike.findMany as jest.Mock).mockResolvedValue([]);
+      (prismaMock.commentLike.findMany as jest.Mock).mockResolvedValue([]);
       (prismaMock.post.count as jest.Mock).mockResolvedValue(5);
       (prismaMock.comment.count as jest.Mock).mockResolvedValue(5);
+      (prismaMock.postLike.count as jest.Mock).mockResolvedValue(0);
+      (prismaMock.commentLike.count as jest.Mock).mockResolvedValue(0);
 
       const res = await request(app)
         .get(`/api/users/${userId}/activity?page=1&limit=5`)
@@ -290,8 +310,12 @@ describe('User Activity Feed API', () => {
       (prismaMock.user.findUnique as jest.Mock).mockResolvedValue(mockUser);
       (prismaMock.post.findMany as jest.Mock).mockResolvedValue([]);
       (prismaMock.comment.findMany as jest.Mock).mockResolvedValue([]);
+      (prismaMock.postLike.findMany as jest.Mock).mockResolvedValue([]);
+      (prismaMock.commentLike.findMany as jest.Mock).mockResolvedValue([]);
       (prismaMock.post.count as jest.Mock).mockResolvedValue(0);
       (prismaMock.comment.count as jest.Mock).mockResolvedValue(0);
+      (prismaMock.postLike.count as jest.Mock).mockResolvedValue(0);
+      (prismaMock.commentLike.count as jest.Mock).mockResolvedValue(0);
 
       const res = await request(app)
         .get(`/api/users/${emptyUserId}/activity`)
@@ -326,8 +350,12 @@ describe('User Activity Feed API', () => {
       (prismaMock.user.findUnique as jest.Mock).mockResolvedValue(mockUser);
       (prismaMock.post.findMany as jest.Mock).mockResolvedValue([mockPost]);
       (prismaMock.comment.findMany as jest.Mock).mockResolvedValue([]);
+      (prismaMock.postLike.findMany as jest.Mock).mockResolvedValue([]);
+      (prismaMock.commentLike.findMany as jest.Mock).mockResolvedValue([]);
       (prismaMock.post.count as jest.Mock).mockResolvedValue(1);
       (prismaMock.comment.count as jest.Mock).mockResolvedValue(0);
+      (prismaMock.postLike.count as jest.Mock).mockResolvedValue(0);
+      (prismaMock.commentLike.count as jest.Mock).mockResolvedValue(0);
 
       const res = await request(app)
         .get(`/api/users/${testUserId}/activity`)
@@ -370,8 +398,12 @@ describe('User Activity Feed API', () => {
       (prismaMock.user.findUnique as jest.Mock).mockResolvedValue(mockUser);
       (prismaMock.post.findMany as jest.Mock).mockResolvedValue([]);
       (prismaMock.comment.findMany as jest.Mock).mockResolvedValue([mockComment]);
+      (prismaMock.postLike.findMany as jest.Mock).mockResolvedValue([]);
+      (prismaMock.commentLike.findMany as jest.Mock).mockResolvedValue([]);
       (prismaMock.post.count as jest.Mock).mockResolvedValue(0);
       (prismaMock.comment.count as jest.Mock).mockResolvedValue(1);
+      (prismaMock.postLike.count as jest.Mock).mockResolvedValue(0);
+      (prismaMock.commentLike.count as jest.Mock).mockResolvedValue(0);
 
       const res = await request(app)
         .get(`/api/users/${testUserId}/activity`)
@@ -406,8 +438,12 @@ describe('User Activity Feed API', () => {
       (prismaMock.user.findUnique as jest.Mock).mockResolvedValue(mockUser);
       (prismaMock.post.findMany as jest.Mock).mockResolvedValue([]);
       (prismaMock.comment.findMany as jest.Mock).mockResolvedValue([]);
+      (prismaMock.postLike.findMany as jest.Mock).mockResolvedValue([]);
+      (prismaMock.commentLike.findMany as jest.Mock).mockResolvedValue([]);
       (prismaMock.post.count as jest.Mock).mockResolvedValue(0);
       (prismaMock.comment.count as jest.Mock).mockResolvedValue(0);
+      (prismaMock.postLike.count as jest.Mock).mockResolvedValue(0);
+      (prismaMock.commentLike.count as jest.Mock).mockResolvedValue(0);
 
       const res = await request(app)
         .get(`/api/users/${testUserId}/activity`)
@@ -460,8 +496,12 @@ describe('User Activity Feed API', () => {
       (prismaMock.user.findUnique as jest.Mock).mockResolvedValue(mockUser);
       (prismaMock.post.findMany as jest.Mock).mockResolvedValue(mockPosts);
       (prismaMock.comment.findMany as jest.Mock).mockResolvedValue(mockComments);
+      (prismaMock.postLike.findMany as jest.Mock).mockResolvedValue([]);
+      (prismaMock.commentLike.findMany as jest.Mock).mockResolvedValue([]);
       (prismaMock.post.count as jest.Mock).mockResolvedValue(2);
       (prismaMock.comment.count as jest.Mock).mockResolvedValue(3);
+      (prismaMock.postLike.count as jest.Mock).mockResolvedValue(0);
+      (prismaMock.commentLike.count as jest.Mock).mockResolvedValue(0);
 
       const res = await request(app)
         .get(`/api/users/${testUserId}/activity?limit=50`)
@@ -475,6 +515,276 @@ describe('User Activity Feed API', () => {
       expect(res.body.activities[1].id).toBe('comment-1');
       expect(res.body.activities[2].type).toBe('post');
       expect(res.body.activities[2].id).toBe('post-2');
+    });
+
+    it('should include post likes in activity feed', async () => {
+      const testUserId = 'test-user-likes';
+      const mockUser = {
+        id: testUserId,
+        deletedAt: null,
+      };
+
+      const mockPostLike = {
+        id: 'like-1',
+        userId: testUserId,
+        postId: 'post-1',
+        createdAt: new Date('2024-01-13T10:00:00Z'),
+        post: {
+          id: 'post-1',
+          title: 'Liked Post',
+          slug: 'liked-post',
+          author: {
+            id: 'author-1',
+            username: 'author',
+          },
+          category: {
+            id: 'category-1',
+            name: 'Technology',
+            slug: 'technology',
+          },
+        },
+      };
+
+      (prismaMock.user.findUnique as jest.Mock).mockResolvedValue(mockUser);
+      (prismaMock.post.findMany as jest.Mock).mockResolvedValue([]);
+      (prismaMock.comment.findMany as jest.Mock).mockResolvedValue([]);
+      (prismaMock.postLike.findMany as jest.Mock).mockResolvedValue([mockPostLike]);
+      (prismaMock.commentLike.findMany as jest.Mock).mockResolvedValue([]);
+      (prismaMock.post.count as jest.Mock).mockResolvedValue(0);
+      (prismaMock.comment.count as jest.Mock).mockResolvedValue(0);
+      (prismaMock.postLike.count as jest.Mock).mockResolvedValue(1);
+      (prismaMock.commentLike.count as jest.Mock).mockResolvedValue(0);
+
+      const res = await request(app)
+        .get(`/api/users/${testUserId}/activity`)
+        .expect(200);
+
+      expect(res.body.activities.length).toBe(1);
+      expect(res.body.activities[0]).toMatchObject({
+        type: 'post_like',
+        id: 'like-1',
+        postId: 'post-1',
+        post: {
+          id: 'post-1',
+          title: 'Liked Post',
+          slug: 'liked-post',
+        },
+      });
+    });
+
+    it('should include comment likes in activity feed', async () => {
+      const testUserId = 'test-user-comment-likes';
+      const mockUser = {
+        id: testUserId,
+        deletedAt: null,
+      };
+
+      const mockCommentLike = {
+        id: 'comment-like-1',
+        userId: testUserId,
+        commentId: 'comment-1',
+        createdAt: new Date('2024-01-12T10:00:00Z'),
+        comment: {
+          id: 'comment-1',
+          content: 'Liked comment',
+          user: {
+            id: 'commenter-1',
+            username: 'commenter',
+          },
+          post: {
+            id: 'post-1',
+            title: 'Post Title',
+            slug: 'post-title',
+          },
+        },
+      };
+
+      (prismaMock.user.findUnique as jest.Mock).mockResolvedValue(mockUser);
+      (prismaMock.post.findMany as jest.Mock).mockResolvedValue([]);
+      (prismaMock.comment.findMany as jest.Mock).mockResolvedValue([]);
+      (prismaMock.postLike.findMany as jest.Mock).mockResolvedValue([]);
+      (prismaMock.commentLike.findMany as jest.Mock).mockResolvedValue([mockCommentLike]);
+      (prismaMock.post.count as jest.Mock).mockResolvedValue(0);
+      (prismaMock.comment.count as jest.Mock).mockResolvedValue(0);
+      (prismaMock.postLike.count as jest.Mock).mockResolvedValue(0);
+      (prismaMock.commentLike.count as jest.Mock).mockResolvedValue(1);
+
+      const res = await request(app)
+        .get(`/api/users/${testUserId}/activity`)
+        .expect(200);
+
+      expect(res.body.activities.length).toBe(1);
+      expect(res.body.activities[0]).toMatchObject({
+        type: 'comment_like',
+        id: 'comment-like-1',
+        commentId: 'comment-1',
+        comment: {
+          id: 'comment-1',
+          content: 'Liked comment',
+        },
+        post: {
+          id: 'post-1',
+          title: 'Post Title',
+          slug: 'post-title',
+        },
+      });
+    });
+
+    it('should sort all activity types by createdAt descending', async () => {
+      const testUserId = 'test-user-all-activities';
+      const mockUser = {
+        id: testUserId,
+        deletedAt: null,
+      };
+
+      const mockPosts = [
+        createMockPost({
+          id: 'post-1',
+          authorId: testUserId,
+          createdAt: new Date('2024-01-15T10:00:00Z'),
+        }),
+      ];
+
+      const mockComments = [
+        createMockComment({
+          id: 'comment-1',
+          userId: testUserId,
+          createdAt: new Date('2024-01-14T10:00:00Z'),
+        }),
+      ];
+
+      const mockPostLike = {
+        id: 'like-1',
+        userId: testUserId,
+        postId: 'post-2',
+        createdAt: new Date('2024-01-13T10:00:00Z'),
+        post: {
+          id: 'post-2',
+          title: 'Liked Post',
+          slug: 'liked-post',
+          author: {
+            id: 'author-1',
+            username: 'author',
+          },
+          category: null,
+        },
+      };
+
+      const mockCommentLike = {
+        id: 'comment-like-1',
+        userId: testUserId,
+        commentId: 'comment-2',
+        createdAt: new Date('2024-01-12T10:00:00Z'),
+        comment: {
+          id: 'comment-2',
+          content: 'Liked comment',
+          user: {
+            id: 'commenter-1',
+            username: 'commenter',
+          },
+        },
+        post: {
+          id: 'post-3',
+          title: 'Post Title',
+          slug: 'post-title',
+        },
+      };
+
+      (prismaMock.user.findUnique as jest.Mock).mockResolvedValue(mockUser);
+      (prismaMock.post.findMany as jest.Mock).mockResolvedValue(mockPosts);
+      (prismaMock.comment.findMany as jest.Mock).mockResolvedValue(mockComments);
+      (prismaMock.postLike.findMany as jest.Mock).mockResolvedValue([mockPostLike]);
+      (prismaMock.commentLike.findMany as jest.Mock).mockResolvedValue([mockCommentLike]);
+      (prismaMock.post.count as jest.Mock).mockResolvedValue(1);
+      (prismaMock.comment.count as jest.Mock).mockResolvedValue(1);
+      (prismaMock.postLike.count as jest.Mock).mockResolvedValue(1);
+      (prismaMock.commentLike.count as jest.Mock).mockResolvedValue(1);
+
+      const res = await request(app)
+        .get(`/api/users/${testUserId}/activity?limit=50`)
+        .expect(200);
+
+      expect(res.body.activities.length).toBe(4);
+      // Should be sorted by createdAt descending: post, comment, post_like, comment_like
+      expect(res.body.activities[0].type).toBe('post');
+      expect(res.body.activities[0].id).toBe('post-1');
+      expect(res.body.activities[1].type).toBe('comment');
+      expect(res.body.activities[1].id).toBe('comment-1');
+      expect(res.body.activities[2].type).toBe('post_like');
+      expect(res.body.activities[2].id).toBe('like-1');
+      expect(res.body.activities[3].type).toBe('comment_like');
+      expect(res.body.activities[3].id).toBe('comment-like-1');
+    });
+
+    it('should only include likes on published posts', async () => {
+      const testUserId = 'test-user-published-likes';
+      const mockUser = {
+        id: testUserId,
+        deletedAt: null,
+      };
+
+      (prismaMock.user.findUnique as jest.Mock).mockResolvedValue(mockUser);
+      (prismaMock.post.findMany as jest.Mock).mockResolvedValue([]);
+      (prismaMock.comment.findMany as jest.Mock).mockResolvedValue([]);
+      (prismaMock.postLike.findMany as jest.Mock).mockResolvedValue([]);
+      (prismaMock.commentLike.findMany as jest.Mock).mockResolvedValue([]);
+      (prismaMock.post.count as jest.Mock).mockResolvedValue(0);
+      (prismaMock.comment.count as jest.Mock).mockResolvedValue(0);
+      (prismaMock.postLike.count as jest.Mock).mockResolvedValue(0);
+      (prismaMock.commentLike.count as jest.Mock).mockResolvedValue(0);
+
+      await request(app)
+        .get(`/api/users/${testUserId}/activity`)
+        .expect(200);
+
+      expect(prismaMock.postLike.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            userId: testUserId,
+            post: {
+              published: true,
+            },
+          }),
+        })
+      );
+
+      expect(prismaMock.commentLike.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            userId: testUserId,
+            comment: {
+              post: {
+                published: true,
+              },
+            },
+          }),
+        })
+      );
+    });
+
+    it('should include likes in pagination total count', async () => {
+      const testUserId = 'test-user-pagination-likes';
+      const mockUser = {
+        id: testUserId,
+        deletedAt: null,
+      };
+
+      (prismaMock.user.findUnique as jest.Mock).mockResolvedValue(mockUser);
+      (prismaMock.post.findMany as jest.Mock).mockResolvedValue([]);
+      (prismaMock.comment.findMany as jest.Mock).mockResolvedValue([]);
+      (prismaMock.postLike.findMany as jest.Mock).mockResolvedValue([]);
+      (prismaMock.commentLike.findMany as jest.Mock).mockResolvedValue([]);
+      (prismaMock.post.count as jest.Mock).mockResolvedValue(5);
+      (prismaMock.comment.count as jest.Mock).mockResolvedValue(3);
+      (prismaMock.postLike.count as jest.Mock).mockResolvedValue(2);
+      (prismaMock.commentLike.count as jest.Mock).mockResolvedValue(1);
+
+      const res = await request(app)
+        .get(`/api/users/${testUserId}/activity`)
+        .expect(200);
+
+      // Total should include all activity types: 5 posts + 3 comments + 2 post likes + 1 comment like = 11
+      expect(res.body.pagination.total).toBe(11);
     });
   });
 });
