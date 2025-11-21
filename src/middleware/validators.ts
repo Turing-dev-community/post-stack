@@ -111,6 +111,10 @@ export const validatePost = [
       }
       return true;
     }),
+  body("scheduledAt")
+    .optional({ nullable: true })
+    .isISO8601()
+    .withMessage("scheduledAt must be a valid ISO 8601 date"),
 ];
 
 export const validateBulkPosts = [

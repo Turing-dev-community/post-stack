@@ -1,8 +1,10 @@
 import { Router } from 'express';
 import { authenticateToken } from '../utils/auth';
-import { followUser, unfollowUser, getFollowers, getFollowing } from '../controllers/usersController';
+import { followUser, unfollowUser, getFollowers, getFollowing, getUserActivity } from '../controllers/usersController';
 import { validatePagination } from '../middleware/validators';
 import { handleValidationErrors } from '../middleware/validation';
+import { cacheMiddleware } from '../middleware/cache';
+import { CACHE_CONFIG } from '../constants/cache';
 
 const router = Router();
 
@@ -30,6 +32,14 @@ router.get(
   validatePagination,
   handleValidationErrors,
   getFollowing
+);
+
+router.get(
+  '/:userId/activity',
+  validatePagination,
+  handleValidationErrors,
+  cacheMiddleware(CACHE_CONFIG.TTL_USER_ACTIVITY),
+  getUserActivity
 );
 
 export default router;
