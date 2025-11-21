@@ -258,3 +258,13 @@ export const validatePostReport = [
     .isLength({ min: 5, max: 500 })
     .withMessage("Reason must be between 5 and 500 characters"),
 ];
+
+export const validateTag = [
+  body("name")
+    .trim()
+    .customSanitizer(sanitizeText)
+    .isLength({ min: 1, max: 50 })
+    .withMessage("Tag name must be between 1 and 50 characters")
+    .matches(/^[a-zA-Z0-9\s-]+$/)
+    .withMessage("Tag name can only contain letters, numbers, spaces, and hyphens"),
+];
