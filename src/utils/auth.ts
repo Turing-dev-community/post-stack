@@ -159,15 +159,6 @@ export const authenticateToken = async (
   }
 };
 
-export const generateSlug = (title: string): string => {
-  return title
-    .toLowerCase()
-    .replace(/\s+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/[^a-z0-9 -]/g, '')
-    .trim();
-};
-
 /**
  * Check if account is currently locked
  */
