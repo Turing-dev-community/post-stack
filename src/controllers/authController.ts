@@ -1,8 +1,13 @@
 import { Response } from 'express';
 import { asyncHandler } from '../middleware/validation';
-import { AuthRequest, comparePassword, generateToken, generateAccessToken, generateRefreshToken, verifyRefreshToken, revokeRefreshToken, revokeAllUserRefreshTokens, hashPassword, getUserRole } from '../utils/auth';
+import {
+  AuthRequest, comparePassword, generateAccessToken, generateRefreshToken, verifyRefreshToken, revokeRefreshToken, revokeAllUserRefreshTokens, hashPassword, getUserRole, isAccountLocked,
+  calculateLockoutExpiration,
+} from '../utils/auth';
 import { prisma } from '../lib/prisma';
 import type { User } from '@prisma/client';
+import { MAX_FAILED_LOGIN_ATTEMPTS } from '../constants/auth';
+import { AccountLockedError } from '../utils/errors';
 
 export const signup = asyncHandler(async (req: AuthRequest, res: Response) => {
   const { email, username, password } = req.body;
@@ -31,11 +36,11 @@ export const signup = asyncHandler(async (req: AuthRequest, res: Response) => {
 
   const accessToken = generateAccessToken(user.id);
   const refreshToken = await generateRefreshToken(user.id);
-  return res.status(201).json({ 
-    message: 'User created successfully', 
-    user: { ...user, role }, 
+  return res.status(201).json({
+    message: 'User created successfully',
+    user: { ...user, role },
     accessToken,
-    refreshToken 
+    refreshToken
   });
 });
 
@@ -43,10 +48,13 @@ export const login = asyncHandler(async (req: AuthRequest, res: Response) => {
   const { email, password } = req.body;
 
   const user: User | null = await prisma.user.findUnique({ where: { email } });
+
+  // If user doesn't exist, return generic error (don't reveal email existence)
   if (!user) {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
 
+  // Check if account is deactivated (check before lockout)
   if (user.deletedAt) {
     return res.status(403).json({
       error: 'Account has been deactivated',
@@ -55,10 +63,47 @@ export const login = asyncHandler(async (req: AuthRequest, res: Response) => {
     });
   }
 
+  // Check if lockout has expired and unlock if needed
+  if (user.lockedUntil && new Date() >= user.lockedUntil) {
+    // Lockout expired, unlock the account
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { lockedUntil: null, failedLoginAttempts: 0 },
+    });
+    user.lockedUntil = null;
+    user.failedLoginAttempts = 0;
+  }
+
+  // Check if account is currently locked
+  if (isAccountLocked(user.lockedUntil) && user.lockedUntil) {
+    throw new AccountLockedError(user.lockedUntil);
+  }
+
+  // Validate password
   const isPasswordValid = await comparePassword(password, user.password);
+
+  // Handle failed login
   if (!isPasswordValid) {
+    const newAttempts = (user.failedLoginAttempts || 0) + 1;
+    const shouldLock = newAttempts >= MAX_FAILED_LOGIN_ATTEMPTS;
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        failedLoginAttempts: newAttempts,
+        lockedUntil: shouldLock ? calculateLockoutExpiration() : user.lockedUntil,
+      },
+    });
+
+    // Return generic error (don't reveal lockout status on failed attempt)
     return res.status(401).json({ error: 'Invalid credentials' });
   }
+
+  // Successful login - reset failed attempts and unlock account
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { failedLoginAttempts: 0, lockedUntil: null },
+  });
 
   const role = await getUserRole(user.id, user.email);
 
