@@ -3218,7 +3218,7 @@ describe("Blog Post Routes", () => {
 
 	describe("posts controller tests", () => {
 		it("should export post CRUD controller functions", () => {
-			const postsController = require("../controllers/postsController");
+			const postsController = require("../controllers/posts");
 			expect(postsController.createPost).toBeDefined();
 			expect(postsController.updatePost).toBeDefined();
 			expect(postsController.deletePost).toBeDefined();
@@ -3227,7 +3227,7 @@ describe("Blog Post Routes", () => {
 		});
 
 		it("should export post listing controller functions", () => {
-			const postsController = require("../controllers/postsController");
+			const postsController = require("../controllers/posts");
 			expect(postsController.getAllPosts).toBeDefined();
 			expect(postsController.getTrendingPosts).toBeDefined();
 			expect(postsController.getPopularPosts).toBeDefined();
@@ -3236,12 +3236,12 @@ describe("Blog Post Routes", () => {
 		});
 
 		it("should export related posts controller function", () => {
-			const postsController = require("../controllers/postsController");
+			const postsController = require("../controllers/posts");
 			expect(postsController.getRelatedPosts).toBeDefined();
 		});
 
 		it("should export post interaction controller functions", () => {
-			const postsController = require("../controllers/postsController");
+			const postsController = require("../controllers/posts");
 			expect(postsController.likePost).toBeDefined();
 			expect(postsController.unlikePost).toBeDefined();
 			expect(postsController.savePost).toBeDefined();
