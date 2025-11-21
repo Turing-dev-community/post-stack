@@ -21,8 +21,7 @@ export function generateSlug(title: string): string {
     .replace(/[^a-z0-9-]/g, '')
     // Replace multiple consecutive hyphens with single hyphen
     .replace(/-+/g, '-')
-    // Remove leading/trailing hyphens
-    .replace(/^-+|-+$/g, '');
+   
 
   // If slug is empty after processing, generate fallback
   if (!slug || slug.length === 0) {
