@@ -399,3 +399,50 @@ export async function getUserActivity(userId: string, page: number, limit: numbe
     },
   };
 }
+
+
+export async function getUserPublicProfile(userId: string) {
+  // Check if user exists and is active
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      username: true,
+      profilePicture: true,
+      about: true,
+      createdAt: true,
+      deletedAt: true,
+    },
+  });
+
+  if (!user || user.deletedAt) {
+    throw new Error('User not found');
+  }
+
+  // Get counts in parallel
+  const [postsCount, followerCount, followingCount] = await Promise.all([
+    prisma.post.count({
+      where: {
+        authorId: userId,
+        published: true,
+      },
+    }),
+    prisma.follow.count({
+      where: { followingId: userId },
+    }),
+    prisma.follow.count({
+      where: { followerId: userId },
+    }),
+  ]);
+
+  return {
+    id: user.id,
+    username: user.username,
+    profilePicture: user.profilePicture,
+    about: user.about,
+    createdAt: user.createdAt,
+    postsCount,
+    followerCount,
+    followingCount,
+  };
+}
