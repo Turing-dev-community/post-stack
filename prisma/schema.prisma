@@ -8,26 +8,28 @@ datasource db {
 }
 
 model User {
-  id                   String        @id @default(cuid())
-  email                String        @unique
-  username             String        @unique
-  password             String
-  profilePicture       String?
-  about                String?
-  deletedAt            DateTime?
-  failedLoginAttempts  Int           @default(0)
-  lockedUntil          DateTime?
-  createdAt            DateTime      @default(now())
-  updatedAt            DateTime      @updatedAt
-  followers      Follow[]      @relation("Follower")
-  following      Follow[]      @relation("Following")
-  likes          PostLike[]
-  commentLikes   CommentLike[]
-  savedPosts     SavedPost[]
-  posts          Post[]
-  comments       Comment[]
-  postReports    PostReport[]
-  refreshTokens  RefreshToken[]
+  id                        String               @id @default(cuid())
+  email                     String               @unique
+  username                  String               @unique
+  password                  String
+  profilePicture            String?
+  about                     String?
+  deletedAt                 DateTime?
+  failedLoginAttempts       Int                  @default(0)
+  lockedUntil               DateTime?
+  createdAt                 DateTime             @default(now())
+  updatedAt                 DateTime             @updatedAt
+  followers                 Follow[]             @relation("Follower")
+  following                 Follow[]             @relation("Following")
+  likes                     PostLike[]
+  commentLikes              CommentLike[]
+  savedPosts                SavedPost[]
+  posts                     Post[]
+  comments                  Comment[]
+  postReports               PostReport[]
+  refreshTokens             RefreshToken[]
+  commenterStatsAsAuthor    UserCommenterStats[] @relation("PostAuthorStats")
+  commenterStatsAsCommenter UserCommenterStats[] @relation("CommenterStats")
 
   @@map("users")
 }
@@ -193,4 +195,21 @@ model RefreshToken {
   @@index([userId])
   @@index([expiresAt])
   @@map("refresh_tokens")
+}
+
+model UserCommenterStats {
+  id            String   @id @default(cuid())
+  postAuthorId  String
+  commenterId   String
+  commentCount  Int      @default(0)
+  lastCommentAt DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  postAuthor    User     @relation("PostAuthorStats", fields: [postAuthorId], references: [id], onDelete: Cascade)
+  commenter     User     @relation("CommenterStats", fields: [commenterId], references: [id], onDelete: Cascade)
+
+  @@unique([postAuthorId, commenterId])
+  @@index([postAuthorId])
+  @@index([commenterId])
+  @@map("user_commenter_stats")
 }
