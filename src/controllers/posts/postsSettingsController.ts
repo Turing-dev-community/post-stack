@@ -1,6 +1,6 @@
 import { Response } from 'express';
 import { AuthRequest } from '../../utils/auth';
-import * as postsService from '../../services/postsService';
+import * as postsService from '../../services/posts';
 
 /**
  * Update comment settings for a post
