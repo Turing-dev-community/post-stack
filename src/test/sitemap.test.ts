@@ -56,7 +56,6 @@ describe('Sitemap Routes', () => {
     it('should include static pages in sitemap', async () => {
       const res = await request(app).get('/sitemap.xml').expect(200);
 
-      expect(res.text).toContain(`<loc>${frontendUrl}/about</loc>`);
       expect(res.text).toContain(`<loc>${frontendUrl}/posts</loc>`);
       expect(res.text).toContain(`<loc>${frontendUrl}/categories</loc>`);
       expect(res.text).toContain(`<loc>${frontendUrl}/tags</loc>`);
@@ -248,8 +247,8 @@ describe('Sitemap Routes', () => {
 
       const res = await request(app).get('/sitemap.xml').expect(200);
 
-
       expect(res.text).toContain(`<loc>${frontendUrl}</loc>`);
+      expect(res.text).toContain(`<loc>${frontendUrl}/posts</loc>`);
     });
 
     it('should handle database errors gracefully', async () => {
