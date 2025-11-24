@@ -23,6 +23,25 @@ async function getThreadDepth(commentId: string, depth: number = 0): Promise<num
   return getThreadDepth(comment.parentId, depth + 1);
 }
 
+async function softDeleteReplies(parentId: string): Promise<void> {
+  const replies = await prisma.comment.findMany({
+    where: {
+      parentId: parentId,
+      deletedAt: null, 
+    },
+    select: { id: true },
+  });
+
+  for (const reply of replies) {
+    await prisma.comment.update({
+      where: { id: reply.id },
+      data: { deletedAt: new Date() },
+    });
+
+    await softDeleteReplies(reply.id);
+  }
+}
+
 async function getNestedReplies(postId: string, parentId: string, postAuthorId: string, currentDepth: number = 0): Promise<any[]> {
   if (currentDepth >= 5) {
     return [];
@@ -32,6 +51,7 @@ async function getNestedReplies(postId: string, parentId: string, postAuthorId: 
     where: {
       parentId: parentId,
       postId: postId,
+      deletedAt: null, 
       user: {
         deletedAt: null, // Filter out comments from deactivated users
       },
@@ -97,6 +117,7 @@ export const getCommentsForPost = asyncHandler(async (req: AuthRequest, res: Res
     where: { 
       postId, 
       parentId: null,
+      deletedAt: null, // Filter out soft-deleted comments
       user: {
         deletedAt: null, // Filter out comments from deactivated users
       },
@@ -465,15 +486,24 @@ export const deleteComment = asyncHandler(async (req: AuthRequest, res: Response
     throw new NotFoundError('Comment not found');
   }
 
+  if (comment.deletedAt !== null) {
+    throw new NotFoundError('Comment not found');
+  }
+
   if (comment.userId !== req.user.id) {
     throw new ForbiddenError('You can only delete your own comments');
   }
 
   await decrementCommenterStats(comment.userId, post.authorId);
 
-  await prisma.comment.delete({
+  await prisma.comment.update({
     where: { id: commentId },
+    data: {
+      deletedAt: new Date(),
+    },
   });
+
+  await softDeleteReplies(commentId);
 
   invalidateCache.invalidatePostCache(post.slug);
 
@@ -494,6 +524,7 @@ export const getRecentComments = asyncHandler(async (req: AuthRequest, res: Resp
   const comments = await prisma.comment.findMany({
     where: {
       parentId: null, // Only top-level comments
+      deletedAt: null, 
       user: {
         deletedAt: null, // Filter out comments from deactivated users
       },
@@ -567,6 +598,7 @@ export const getRecentComments = asyncHandler(async (req: AuthRequest, res: Resp
   const total = await prisma.comment.count({
     where: {
       parentId: null,
+      deletedAt: null, 
       user: {
         deletedAt: null, // Filter out comments from deactivated users
       },
