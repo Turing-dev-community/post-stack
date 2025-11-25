@@ -32,6 +32,11 @@ export async function createPost(data: CreatePostData, userId: string) {
 			: false
 		: data.published;
 
+	// Excerpt logic: use provided excerpt, or fall back to metaDescription if available
+	const finalExcerpt = data.excerpt !== undefined && data.excerpt !== null
+		? data.excerpt
+		: data.metaDescription || null;
+
 	const post = await prisma.post.create({
 		data: {
 			title: data.title,
@@ -44,6 +49,7 @@ export async function createPost(data: CreatePostData, userId: string) {
 			metaTitle: data.metaTitle,
 			metaDescription: data.metaDescription,
 			ogImage: data.ogImage,
+			excerpt: finalExcerpt,
 			...(scheduledDate ? ({ scheduledAt: scheduledDate } as any) : {}),
 			tags:
 				data.tags && data.tags.length > 0
@@ -113,6 +119,23 @@ export async function updatePost(
 		}
 	}
 
+	// Excerpt logic: use provided excerpt, or fall back to metaDescription if available
+	// If excerpt is explicitly set to null, use null
+	// If excerpt is not provided in update, keep existing excerpt or use metaDescription
+	let finalExcerpt: string | null | undefined;
+	if (data.excerpt !== undefined) {
+		// Excerpt is explicitly provided (could be null to clear it)
+		finalExcerpt = data.excerpt !== null ? data.excerpt : null;
+	} else if (data.metaDescription !== undefined) {
+		// If metaDescription is being updated but excerpt is not provided,
+		// use metaDescription as excerpt if current excerpt is null or matches old metaDescription
+		const currentMetaDescription = existingPost.metaDescription;
+		if (!existingPost.excerpt || existingPost.excerpt === currentMetaDescription) {
+			finalExcerpt = data.metaDescription || null;
+		}
+		// Otherwise, keep existing excerpt
+	}
+
 	const post = await prisma.$transaction(async (tx) => {
 		if (data.tags !== undefined) {
 			await tx.postTag.deleteMany({
@@ -135,6 +158,7 @@ export async function updatePost(
 				metaTitle: data.metaTitle,
 				metaDescription: data.metaDescription,
 				ogImage: data.ogImage,
+				...(finalExcerpt !== undefined ? { excerpt: finalExcerpt } : {}),
 				...(finalScheduledAt !== undefined
 					? ({ scheduledAt: finalScheduledAt } as any)
 					: {}),
@@ -233,6 +257,11 @@ export async function bulkCreatePosts(
 		postsData.map((postData) => {
 			const slug = generateSlug(postData.title);
 
+			// Excerpt logic: use provided excerpt, or fall back to metaDescription if available
+			const finalExcerpt = postData.excerpt !== undefined && postData.excerpt !== null
+				? postData.excerpt
+				: postData.metaDescription || null;
+
 			return prisma.post.create({
 				data: {
 					title: postData.title,
@@ -245,6 +274,7 @@ export async function bulkCreatePosts(
 					metaTitle: postData.metaTitle,
 					metaDescription: postData.metaDescription,
 					ogImage: postData.ogImage,
+					excerpt: finalExcerpt,
 					tags:
 						postData.tags && postData.tags.length > 0
 							? {

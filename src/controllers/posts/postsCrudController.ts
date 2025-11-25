@@ -24,6 +24,7 @@ export async function createPost(
 		metaTitle,
 		metaDescription,
 		ogImage,
+		excerpt,
 		tags,
 		scheduledAt,
 	} = req.body;
@@ -39,6 +40,7 @@ export async function createPost(
 				metaTitle,
 				metaDescription,
 				ogImage,
+				excerpt,
 				tags,
 				scheduledAt,
 			},
@@ -82,6 +84,7 @@ export async function updatePost(
 		metaTitle,
 		metaDescription,
 		ogImage,
+		excerpt,
 		tags,
 	} = req.body;
 
@@ -97,6 +100,7 @@ export async function updatePost(
 				metaTitle,
 				metaDescription,
 				ogImage,
+				excerpt,
 				tags,
 			},
 			req.user.id
