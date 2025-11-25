@@ -42,7 +42,7 @@ async function softDeleteReplies(parentId: string): Promise<void> {
   }
 }
 
-async function getNestedReplies(postId: string, parentId: string, postAuthorId: string, currentDepth: number = 0): Promise<any[]> {
+async function getNestedReplies(postId: string, parentId: string, postAuthorId: string, currentDepth: number = 0, likeCountsMap?: Map<string, number>): Promise<any[]> {
   if (currentDepth >= 5) {
     return [];
   }
@@ -72,9 +72,7 @@ async function getNestedReplies(postId: string, parentId: string, postAuthorId: 
 
   const repliesWithNested = await Promise.all(
     replies.map(async (reply: any) => {
-      const likeCount = await prisma.commentLike.count({
-        where: { commentId: reply.id },
-      });
+      const likeCount = likeCountsMap?.get(reply.id) || 0;
       return {
         id: reply.id,
         content: reply.content,
@@ -86,7 +84,7 @@ async function getNestedReplies(postId: string, parentId: string, postAuthorId: 
         user: reply.user,
         likeCount,
         isTopCommenter: topCommenterMap.get(reply.userId) || false,
-        replies: await getNestedReplies(postId, reply.id, postAuthorId, currentDepth + 1),
+        replies: await getNestedReplies(postId, reply.id, postAuthorId, currentDepth + 1, likeCountsMap),
       };
     })
   );
@@ -133,14 +131,29 @@ export const getCommentsForPost = asyncHandler(async (req: AuthRequest, res: Res
     orderBy: { createdAt: 'asc' },
   });
 
+  const likeCounts = await prisma.commentLike.groupBy({
+    by: ['commentId'],
+    where: {
+      comment: {
+        postId: postId,
+      },
+    },
+    _count: {
+      commentId: true,
+    },
+  });
+
+  const likeCountsMap = new Map<string, number>();
+  likeCounts.forEach((item) => {
+    likeCountsMap.set(item.commentId, item._count.commentId);
+  });
+
   const commenterIds = comments.map((c: any) => c.userId);
   const topCommenterMap = await checkMultipleTopCommenters(commenterIds, post.authorId);
 
   const commentsWithReplies = await Promise.all(
     comments.map(async (comment: any) => {
-      const likeCount = await prisma.commentLike.count({
-        where: { commentId: comment.id },
-      });
+      const likeCount = likeCountsMap.get(comment.id) || 0;
       return {
         id: comment.id,
         content: comment.content,
@@ -152,7 +165,7 @@ export const getCommentsForPost = asyncHandler(async (req: AuthRequest, res: Res
         user: comment.user,
         likeCount,
         isTopCommenter: topCommenterMap.get(comment.userId) || false,
-        replies: await getNestedReplies(postId, comment.id, post.authorId, 0),
+        replies: await getNestedReplies(postId, comment.id, post.authorId, 0, likeCountsMap),
       };
     })
   );
@@ -571,27 +584,42 @@ export const getRecentComments = asyncHandler(async (req: AuthRequest, res: Resp
     topCommenterMap.set(commenterId, isTopCommenter);
   });
 
+  const commentIds = comments.map(c => c.id);
+  const likeCounts = await prisma.commentLike.groupBy({
+    by: ['commentId'],
+    where: {
+      commentId: {
+        in: commentIds,
+      },
+    },
+    _count: {
+      commentId: true,
+    },
+  });
+
+
+  const likeCountsMap = new Map<string, number>();
+  likeCounts.forEach((item) => {
+    likeCountsMap.set(item.commentId, item._count.commentId);
+  });
+
   // Get like counts for each comment
-  const commentsWithLikes = await Promise.all(
-    comments.map(async (comment: any) => {
-      const likeCount = await prisma.commentLike.count({
-        where: { commentId: comment.id },
-      });
-      return {
-        id: comment.id,
-        content: comment.content,
-        postId: comment.postId,
-        userId: comment.userId,
-        parentId: comment.parentId,
-        createdAt: comment.createdAt,
-        updatedAt: comment.updatedAt,
-        user: comment.user,
-        post: comment.post,
-        likeCount,
-        isTopCommenter: topCommenterMap.get(comment.userId) || false,
-      };
-    })
-  );
+  const commentsWithLikes = comments.map((comment: any) => {
+    const likeCount = likeCountsMap.get(comment.id) || 0;
+    return {
+      id: comment.id,
+      content: comment.content,
+      postId: comment.postId,
+      userId: comment.userId,
+      parentId: comment.parentId,
+      createdAt: comment.createdAt,
+      updatedAt: comment.updatedAt,
+      user: comment.user,
+      post: comment.post,
+      likeCount,
+      isTopCommenter: topCommenterMap.get(comment.userId) || false,
+    };
+  });
 
   // Get total count for pagination
   const total = await prisma.comment.count({
