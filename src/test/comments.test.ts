@@ -539,13 +539,13 @@ describe('Comments API (mocked)', () => {
         content: 'Comment with replies',
       });
 
-      
+
       (prismaMock.comment.findMany as jest.Mock).mockResolvedValueOnce([
         { id: 'reply-1' },
         { id: 'reply-2' },
       ]);
 
-  
+
       (prismaMock.comment.findMany as jest.Mock).mockResolvedValue([]);
 
       (prismaMock.comment.update as jest.Mock).mockResolvedValue({});
@@ -556,7 +556,7 @@ describe('Comments API (mocked)', () => {
         .expect(200);
 
       expect(res.body).toHaveProperty('message', 'Comment deleted successfully');
-   
+
       expect(prismaMock.comment.update).toHaveBeenCalledWith({
         where: { id: commentId },
         data: { deletedAt: expect.any(Date) },
@@ -618,6 +618,7 @@ describe('Comments API (mocked)', () => {
 
       (prismaMock.commentLike.count as jest.Mock).mockResolvedValue(0);
       (prismaMock.comment.findMany as jest.Mock).mockResolvedValue([]);
+      (prismaMock.userCommenterStats.findMany as jest.Mock).mockResolvedValue([]);
 
       const res = await request(app)
         .get(`/api/posts/${postId}/comments`)
@@ -631,7 +632,6 @@ describe('Comments API (mocked)', () => {
         expect.objectContaining({
           where: expect.objectContaining({
             postId,
-            parentId: null,
             deletedAt: null,
           }),
         })
@@ -971,10 +971,10 @@ describe('Comments API (mocked)', () => {
     beforeEach(() => {
       jest.clearAllMocks();
       invalidateCache.invalidateAll();
-      
+
       // Mock userCommenterStats to return empty array by default
       (prismaMock.userCommenterStats.findMany as jest.Mock).mockResolvedValue([]);
-      
+
       // Mock authenticateToken middleware for active and deactivated users
       (prismaMock.user.findUnique as jest.Mock).mockImplementation(async (args: any) => {
         if (args.where.id === activeUserId || args.where.email?.includes('active')) {
@@ -1075,7 +1075,7 @@ describe('Comments API (mocked)', () => {
           id: postId,
           allowComments: true,
         });
-        
+
         // Mock for top-level comments and nested replies
         (prismaMock.comment.findMany as jest.Mock)
           .mockResolvedValueOnce([activeComment]) // Top-level comments
@@ -1285,7 +1285,7 @@ describe('Comments API (mocked)', () => {
         expect(response.body.comments).toHaveLength(1);
         expect(response.body.comments[0].replies).toHaveLength(1);
         expect(response.body.comments[0].replies[0].replies).toHaveLength(1);
-        
+
         // Verify all nested levels only have active users
         expect(response.body.comments[0].user.id).toBe(activeUserId);
         expect(response.body.comments[0].replies[0].user.id).toBe(activeUserId);

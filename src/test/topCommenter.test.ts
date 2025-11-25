@@ -138,7 +138,7 @@ describe('Top Commenter Feature', () => {
     it('should not track stats when user comments on their own post', async () => {
       const mockPost = {
         id: postId,
-        authorId: userId, 
+        authorId: userId,
         slug: 'test-post',
         allowComments: true,
       };
@@ -200,8 +200,9 @@ describe('Top Commenter Feature', () => {
         deletedAt: null,
       });
       (prismaMock.post.findUnique as jest.Mock).mockResolvedValue(mockPost);
-      (prismaMock.comment.findUnique as jest.Mock).mockResolvedValue(mockComment);
-      (prismaMock.comment.delete as jest.Mock).mockResolvedValue(mockComment);
+      (prismaMock.comment.findFirst as jest.Mock).mockResolvedValue(mockComment);
+      (prismaMock.comment.findMany as jest.Mock).mockResolvedValue([]);
+      (prismaMock.comment.update as jest.Mock).mockResolvedValue({ ...mockComment, deletedAt: new Date() });
       (prismaMock.userCommenterStats.findUnique as jest.Mock).mockResolvedValue(existingStats);
       (prismaMock.userCommenterStats.update as jest.Mock).mockResolvedValue({
         ...existingStats,
@@ -251,8 +252,9 @@ describe('Top Commenter Feature', () => {
         deletedAt: null,
       });
       (prismaMock.post.findUnique as jest.Mock).mockResolvedValue(mockPost);
-      (prismaMock.comment.findUnique as jest.Mock).mockResolvedValue(mockComment);
-      (prismaMock.comment.delete as jest.Mock).mockResolvedValue(mockComment);
+      (prismaMock.comment.findFirst as jest.Mock).mockResolvedValue(mockComment);
+      (prismaMock.comment.findMany as jest.Mock).mockResolvedValue([]);
+      (prismaMock.comment.update as jest.Mock).mockResolvedValue({ ...mockComment, deletedAt: new Date() });
       (prismaMock.userCommenterStats.findUnique as jest.Mock).mockResolvedValue(existingStats);
       (prismaMock.userCommenterStats.delete as jest.Mock).mockResolvedValue(existingStats);
 
@@ -355,7 +357,7 @@ describe('Top Commenter Feature', () => {
           id: 'comment-1',
           content: 'Comment',
           postId,
-          userId: postAuthorId, 
+          userId: postAuthorId,
           parentId: null,
           createdAt: new Date(),
           updatedAt: new Date(),
@@ -431,7 +433,7 @@ describe('Top Commenter Feature', () => {
         id: 'comment-2',
         content: 'Reply',
         postId,
-        userId, 
+        userId,
         parentId: 'comment-1',
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -439,21 +441,21 @@ describe('Top Commenter Feature', () => {
       };
 
       (prismaMock.post.findUnique as jest.Mock).mockResolvedValue(mockPost);
-      
+
       (prismaMock.comment.findMany as jest.Mock)
-        .mockResolvedValueOnce([topLevelComment]) 
-        .mockResolvedValueOnce([reply]) 
-        .mockResolvedValueOnce([]); 
-      
+        .mockResolvedValueOnce([topLevelComment])
+        .mockResolvedValueOnce([reply])
+        .mockResolvedValueOnce([]);
+
       (prismaMock.commentLike.count as jest.Mock).mockResolvedValue(0);
-      
+
       (prismaMock.userCommenterStats.findMany as jest.Mock)
         .mockResolvedValueOnce([
           { commenterId: 'user-2', commentCount: 2 },
-        ]) 
+        ])
         .mockResolvedValueOnce([
           { commenterId: userId, commentCount: 7 },
-        ]); 
+        ]);
 
       const res = await request(app).get(`/api/posts/${postId}/comments`).expect(200);
 
@@ -514,9 +516,9 @@ describe('Top Commenter Feature', () => {
 
       const res = await request(app).get(`/api/posts/${postId}/comments`).expect(200);
 
-      expect(res.body.comments[0].isTopCommenter).toBe(true); 
-      expect(res.body.comments[1].isTopCommenter).toBe(false); 
-      expect(res.body.comments[2].isTopCommenter).toBe(true); 
+      expect(res.body.comments[0].isTopCommenter).toBe(true);
+      expect(res.body.comments[1].isTopCommenter).toBe(false);
+      expect(res.body.comments[2].isTopCommenter).toBe(true);
     });
 
     it('should handle no stats gracefully', async () => {
