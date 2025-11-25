@@ -414,7 +414,7 @@ describe('Comments API (mocked)', () => {
         slug: 'test-post',
       });
 
-      (prismaMock.comment.findUnique as jest.Mock).mockResolvedValue({
+      (prismaMock.comment.findFirst as jest.Mock).mockResolvedValue({
         id: commentId,
         postId: postId,
         userId: userId,
@@ -480,7 +480,7 @@ describe('Comments API (mocked)', () => {
         slug: 'test-post',
       });
 
-      (prismaMock.comment.findUnique as jest.Mock).mockResolvedValue(null);
+      (prismaMock.comment.findFirst as jest.Mock).mockResolvedValue(null);
 
       const res = await request(app)
         .delete(`/api/posts/${postId}/comments/${commentId}`)
@@ -503,7 +503,7 @@ describe('Comments API (mocked)', () => {
         slug: 'test-post',
       });
 
-      (prismaMock.comment.findUnique as jest.Mock).mockResolvedValue({
+      (prismaMock.comment.findFirst as jest.Mock).mockResolvedValue({
         id: commentId,
         postId: postId,
         userId: otherUserId, // Different user
@@ -531,7 +531,7 @@ describe('Comments API (mocked)', () => {
         slug: 'test-post',
       });
 
-      (prismaMock.comment.findUnique as jest.Mock).mockResolvedValue({
+      (prismaMock.comment.findFirst as jest.Mock).mockResolvedValue({
         id: commentId,
         postId: postId,
         userId: userId,
@@ -583,13 +583,7 @@ describe('Comments API (mocked)', () => {
         slug: 'test-post',
       });
 
-      (prismaMock.comment.findUnique as jest.Mock).mockResolvedValue({
-        id: commentId,
-        postId: postId,
-        userId: userId,
-        deletedAt: new Date('2024-01-01'), 
-        content: 'Deleted comment',
-      });
+      (prismaMock.comment.findFirst as jest.Mock).mockResolvedValue(null);
 
       const res = await request(app)
         .delete(`/api/posts/${postId}/comments/${commentId}`)

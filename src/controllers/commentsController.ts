@@ -478,15 +478,14 @@ export const deleteComment = asyncHandler(async (req: AuthRequest, res: Response
     throw new NotFoundError('Post not found');
   }
 
-  const comment = await prisma.comment.findUnique({
-    where: { id: commentId },
+  const comment = await prisma.comment.findFirst({
+    where: { 
+      id: commentId,
+      deletedAt: null,
+    },
   });
 
   if (!comment || comment.postId !== postId) {
-    throw new NotFoundError('Comment not found');
-  }
-
-  if (comment.deletedAt !== null) {
     throw new NotFoundError('Comment not found');
   }
 
