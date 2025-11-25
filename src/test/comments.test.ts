@@ -145,7 +145,7 @@ describe('Comments API (mocked)', () => {
   describe('GET /api/posts/:postId/comments', () => {
     it('returns top-level comments with nested replies and like count', async () => {
       const postId = 'post-get';
-      (prismaMock.post.findUnique as jest.Mock).mockResolvedValue({ id: postId });
+      (prismaMock.post.findUnique as jest.Mock).mockResolvedValue({ id: postId, authorId: 'author-1' });
 
       (prismaMock.comment.findMany as jest.Mock).mockResolvedValueOnce([
         {
@@ -161,6 +161,7 @@ describe('Comments API (mocked)', () => {
       ]);
 
       (prismaMock.commentLike.count as jest.Mock).mockResolvedValueOnce(1);
+      (prismaMock.userCommenterStats.findMany as jest.Mock).mockResolvedValue([]);
 
       (prismaMock.comment.findMany as jest.Mock).mockResolvedValueOnce([
         {
@@ -545,6 +546,8 @@ describe('Comments API (mocked)', () => {
     beforeEach(() => {
       // Clear cache before each test to ensure fresh data
       invalidateCache.invalidateAll();
+      // Mock userCommenterStats to return empty array by default
+      (prismaMock.userCommenterStats.findMany as jest.Mock).mockResolvedValue([]);
     });
 
     const createMockComment = (id: string, postId: string, userId: string, createdAt: Date, content: string = 'Test comment') => ({
@@ -563,6 +566,7 @@ describe('Comments API (mocked)', () => {
         id: postId,
         title: `Post ${postId}`,
         slug: `post-${postId}`,
+        authorId: `author-${postId}`,
       },
     });
 
@@ -576,6 +580,7 @@ describe('Comments API (mocked)', () => {
         .mockResolvedValueOnce(5) // comment1 likes
         .mockResolvedValueOnce(3); // comment2 likes
       (prismaMock.comment.count as jest.Mock).mockClear().mockResolvedValue(2);
+      (prismaMock.userCommenterStats.findMany as jest.Mock).mockClear().mockResolvedValue([]);
 
       const res = await request(app)
         .get('/api/posts/recent-comments')
@@ -869,6 +874,9 @@ describe('Comments API (mocked)', () => {
     beforeEach(() => {
       jest.clearAllMocks();
       invalidateCache.invalidateAll();
+      
+      // Mock userCommenterStats to return empty array by default
+      (prismaMock.userCommenterStats.findMany as jest.Mock).mockResolvedValue([]);
       
       // Mock authenticateToken middleware for active and deactivated users
       (prismaMock.user.findUnique as jest.Mock).mockImplementation(async (args: any) => {
