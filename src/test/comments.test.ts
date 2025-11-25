@@ -626,6 +626,16 @@ describe('Comments API (mocked)', () => {
       expect(res.body.comments).toHaveLength(1);
       expect(res.body.comments[0].id).toBe('comment-1');
       expect(res.body.comments[0].content).toBe('Active comment');
+
+      expect(prismaMock.comment.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            postId,
+            parentId: null,
+            deletedAt: null,
+          }),
+        })
+      );
     });
   });
 
