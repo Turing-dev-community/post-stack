@@ -50,6 +50,7 @@ model Post {
   metaDescription String?
   metaTitle       String?
   ogImage         String?
+  excerpt         String?
   viewCount       Int          @default(0)
   likes           PostLike[]
   savedBy         SavedPost[]

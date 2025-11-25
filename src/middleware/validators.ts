@@ -86,6 +86,12 @@ export const validatePost = [
     .customSanitizer(sanitizeText)
     .isLength({ max: 160 })
     .withMessage("Meta description must be 160 characters or less"),
+  body("excerpt")
+    .optional({ nullable: true })
+    .trim()
+    .customSanitizer(sanitizeText)
+    .isLength({ max: 500 })
+    .withMessage("Excerpt must be 500 characters or less"),
   body("ogImage")
     .optional({ nullable: true })
     .trim()
@@ -159,6 +165,9 @@ export const validateBulkPosts = [
         }
         if (post.metaDescription !== undefined && post.metaDescription !== null && (typeof post.metaDescription !== "string" || post.metaDescription.trim().length > 160)) {
           throw new Error(`Post at index ${i}: metaDescription must be 160 characters or less`);
+        }
+        if (post.excerpt !== undefined && post.excerpt !== null && (typeof post.excerpt !== "string" || post.excerpt.trim().length > 500)) {
+          throw new Error(`Post at index ${i}: excerpt must be 500 characters or less`);
         }
         if (post.ogImage !== undefined && post.ogImage !== null && typeof post.ogImage !== "string") {
           throw new Error(`Post at index ${i}: ogImage must be a string or null`);
