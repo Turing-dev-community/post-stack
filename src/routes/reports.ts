@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import { authenticateToken, AuthRequest } from '../utils/auth';
 import { asyncHandler, handleValidationErrors } from '../middleware/validation';
-import { getReports, updateReportStatus } from '../controllers/reportsController';
+import { getReports, updateReportStatus, getCommentReports, updateCommentReportStatus } from '../controllers/reportsController';
 import { validatePagination } from '../middleware/validators';
 
 const router = Router();
@@ -12,6 +12,14 @@ router.get('/', authenticateToken, validatePagination, handleValidationErrors, a
 
 router.patch('/:id', authenticateToken, asyncHandler(
   (req: AuthRequest, res: Response) => updateReportStatus(req, res)
+));
+
+router.get('/comments', authenticateToken, validatePagination, handleValidationErrors, asyncHandler(
+  (req: AuthRequest, res: Response) => getCommentReports(req, res)
+));
+
+router.patch('/comments/:id', authenticateToken, asyncHandler(
+  (req: AuthRequest, res: Response) => updateCommentReportStatus(req, res)
 ));
 
 export default router;
