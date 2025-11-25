@@ -139,6 +139,7 @@ model Comment {
   postId    String
   userId    String
   parentId  String?
+  deletedAt DateTime?
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
   post      Post          @relation(fields: [postId], references: [id], onDelete: Cascade)
