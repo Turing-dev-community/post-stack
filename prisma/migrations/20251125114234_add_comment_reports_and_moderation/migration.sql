@@ -2,8 +2,7 @@
 CREATE TYPE "ModerationStatus" AS ENUM ('APPROVED', 'PENDING', 'HIDDEN');
 
 -- AlterTable
-ALTER TABLE "comments" ADD COLUMN     "deletedAt" TIMESTAMP(3),
-ADD COLUMN     "moderationStatus" "ModerationStatus" NOT NULL DEFAULT 'APPROVED';
+ALTER TABLE "comments" ADD COLUMN     "moderationStatus" "ModerationStatus" NOT NULL DEFAULT 'APPROVED';
 
 -- CreateTable
 CREATE TABLE "comment_reports" (

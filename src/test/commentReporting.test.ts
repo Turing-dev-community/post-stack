@@ -31,7 +31,7 @@ describe('Comment Reporting and Moderation API', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    
+
     (prismaMock.user.findUnique as jest.Mock).mockImplementation(({ where }) => {
       if (where.id === userId) {
         return Promise.resolve({
@@ -485,7 +485,7 @@ describe('Comment Reporting and Moderation API', () => {
         }
         return Promise.resolve(null);
       });
-      
+
       (prismaMock.commentReport.findMany as jest.Mock).mockResolvedValue(mockReports);
       (prismaMock.commentReport.count as jest.Mock).mockResolvedValue(1);
 
@@ -545,6 +545,8 @@ describe('Comment Reporting and Moderation API', () => {
       (prismaMock.post.findUnique as jest.Mock).mockResolvedValue(mockPost);
       (prismaMock.comment.findMany as jest.Mock).mockResolvedValue(visibleComments);
       (prismaMock.commentLike.count as jest.Mock).mockResolvedValue(0);
+      (prismaMock.userCommenterStats.findMany as jest.Mock).mockResolvedValue([]);
+
 
       const res = await request(app)
         .get(`/api/posts/${postId}/comments`)
@@ -592,6 +594,7 @@ describe('Comment Reporting and Moderation API', () => {
       (prismaMock.post.findUnique as jest.Mock).mockResolvedValue(mockPost);
       (prismaMock.comment.findMany as jest.Mock).mockResolvedValue(allComments);
       (prismaMock.commentLike.count as jest.Mock).mockResolvedValue(0);
+      (prismaMock.userCommenterStats.findMany as jest.Mock).mockResolvedValue([]);
 
       const res = await request(app)
         .get(`/api/posts/${postId}/comments`)
