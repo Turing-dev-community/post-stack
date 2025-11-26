@@ -160,7 +160,11 @@ describe('Comments API (mocked)', () => {
         },
       ]);
 
-      (prismaMock.commentLike.count as jest.Mock).mockResolvedValueOnce(1);
+      (prismaMock.commentLike.groupBy as jest.Mock).mockResolvedValueOnce([
+        { commentId: 'c1', _count: { commentId: 3 } },
+        { commentId: 'c1-r1', _count: { commentId: 1 } },
+      ]);
+
       (prismaMock.userCommenterStats.findMany as jest.Mock).mockResolvedValue([]);
 
       (prismaMock.comment.findMany as jest.Mock).mockResolvedValueOnce([
@@ -176,8 +180,6 @@ describe('Comments API (mocked)', () => {
         },
       ]);
 
-      (prismaMock.commentLike.count as jest.Mock).mockResolvedValueOnce(0);
-
       (prismaMock.comment.findMany as jest.Mock).mockResolvedValueOnce([]);
 
       const res = await request(app)
@@ -186,9 +188,115 @@ describe('Comments API (mocked)', () => {
 
       expect(res.body).toHaveProperty('comments');
       expect(res.body.comments.length).toBe(1);
-      expect(res.body.comments[0]).toHaveProperty('likeCount', 1);
+      expect(res.body.comments[0]).toHaveProperty('likeCount', 3);
       expect(res.body.comments[0].replies.length).toBe(1);
       expect(res.body.comments[0].replies[0]).toHaveProperty('content', 'Reply to first');
+      expect(res.body.comments[0].replies[0]).toHaveProperty('likeCount', 1);
+    });
+
+    it('uses batch query to fetch like counts (N+1 fix verification)', async () => {
+      const postId = 'post-batch';
+      (prismaMock.post.findUnique as jest.Mock).mockResolvedValue({ id: postId, authorId: 'author-1' });
+
+      // Multiple top-level comments
+      (prismaMock.comment.findMany as jest.Mock).mockResolvedValueOnce([
+        {
+          id: 'c1',
+          content: 'Comment 1',
+          postId,
+          userId,
+          parentId: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          user: { id: userId, username: 'testuser' },
+        },
+        {
+          id: 'c2',
+          content: 'Comment 2',
+          postId,
+          userId: userId2,
+          parentId: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          user: { id: userId2, username: 'testuser2' },
+        },
+      ]);
+
+      // Mock single batch groupBy call for all like counts
+      (prismaMock.commentLike.groupBy as jest.Mock).mockResolvedValueOnce([
+        { commentId: 'c1', _count: { commentId: 5 } },
+        { commentId: 'c2', _count: { commentId: 2 } },
+        { commentId: 'c1-r1', _count: { commentId: 1 } },
+      ]);
+
+      (prismaMock.userCommenterStats.findMany as jest.Mock).mockResolvedValue([]);
+
+      // Replies for first comment
+      (prismaMock.comment.findMany as jest.Mock).mockResolvedValueOnce([
+        {
+          id: 'c1-r1',
+          content: 'Reply to c1',
+          postId,
+          userId,
+          parentId: 'c1',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          user: { id: userId, username: 'testuser' },
+        },
+      ]);
+
+      // No nested replies for c1-r1
+      (prismaMock.comment.findMany as jest.Mock).mockResolvedValueOnce([]);
+
+      // No replies for second comment
+      (prismaMock.comment.findMany as jest.Mock).mockResolvedValueOnce([]);
+
+      const res = await request(app)
+        .get(`/api/posts/${postId}/comments`)
+        .expect(200);
+
+      expect(res.body).toHaveProperty('comments');
+      expect(res.body.comments.length).toBe(2);
+      
+      // Verify like counts are correctly applied from the batch query
+      expect(res.body.comments[0]).toHaveProperty('likeCount', 5);
+      expect(res.body.comments[1]).toHaveProperty('likeCount', 2);
+      expect(res.body.comments[0].replies[0]).toHaveProperty('likeCount', 1);
+
+      // Verify groupBy was called only once (not once per comment)
+      expect(prismaMock.commentLike.groupBy).toHaveBeenCalledTimes(1);
+    });
+
+    it('handles comments with no likes correctly', async () => {
+      const postId = 'post-no-likes';
+      (prismaMock.post.findUnique as jest.Mock).mockResolvedValue({ id: postId, authorId: 'author-1' });
+
+      (prismaMock.comment.findMany as jest.Mock).mockResolvedValueOnce([
+        {
+          id: 'c1',
+          content: 'Unloved comment',
+          postId,
+          userId,
+          parentId: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          user: { id: userId, username: 'testuser' },
+        },
+      ]);
+
+      // Empty groupBy result when no likes exist
+      (prismaMock.commentLike.groupBy as jest.Mock).mockResolvedValueOnce([]);
+
+      (prismaMock.userCommenterStats.findMany as jest.Mock).mockResolvedValue([]);
+      (prismaMock.comment.findMany as jest.Mock).mockResolvedValueOnce([]);
+
+      const res = await request(app)
+        .get(`/api/posts/${postId}/comments`)
+        .expect(200);
+
+      expect(res.body).toHaveProperty('comments');
+      expect(res.body.comments.length).toBe(1);
+      expect(res.body.comments[0]).toHaveProperty('likeCount', 0);
     });
   });
 
@@ -616,7 +724,11 @@ describe('Comments API (mocked)', () => {
         },
       ]);
 
-      (prismaMock.commentLike.count as jest.Mock).mockResolvedValue(0);
+      // Mock batch groupBy for like counts
+      (prismaMock.commentLike.groupBy as jest.Mock).mockResolvedValue([
+        { commentId: 'comment-1', _count: { commentId: 0 } },
+      ]);
+      
       (prismaMock.comment.findMany as jest.Mock).mockResolvedValue([]);
       (prismaMock.userCommenterStats.findMany as jest.Mock).mockResolvedValue([]);
 
@@ -673,9 +785,13 @@ describe('Comments API (mocked)', () => {
       const comment2 = createMockComment('comment-2', 'post-2', userId2, new Date(now.getTime() - 2000));
 
       (prismaMock.comment.findMany as jest.Mock).mockClear().mockResolvedValue([comment1, comment2]);
-      (prismaMock.commentLike.count as jest.Mock).mockClear()
-        .mockResolvedValueOnce(5) // comment1 likes
-        .mockResolvedValueOnce(3); // comment2 likes
+      
+      // Mock batch groupBy call instead of individual count calls (N+1 fix)
+      (prismaMock.commentLike.groupBy as jest.Mock).mockClear().mockResolvedValueOnce([
+        { commentId: 'comment-1', _count: { commentId: 5 } },
+        { commentId: 'comment-2', _count: { commentId: 3 } },
+      ]);
+      
       (prismaMock.comment.count as jest.Mock).mockClear().mockResolvedValue(2);
       (prismaMock.userCommenterStats.findMany as jest.Mock).mockClear().mockResolvedValue([]);
 
@@ -703,7 +819,7 @@ describe('Comments API (mocked)', () => {
       const comment1 = createMockComment('comment-1', 'post-1', userId, new Date(now.getTime() - 1000));
 
       (prismaMock.comment.findMany as jest.Mock).mockClear().mockResolvedValue([comment1]);
-      (prismaMock.commentLike.count as jest.Mock).mockClear().mockResolvedValue(0);
+      (prismaMock.commentLike.groupBy as jest.Mock).mockClear().mockResolvedValue([]);
       (prismaMock.comment.count as jest.Mock).mockClear().mockResolvedValue(1);
 
       await request(app)
@@ -730,7 +846,7 @@ describe('Comments API (mocked)', () => {
       const comment1 = createMockComment('comment-1', 'post-1', userId, new Date(now.getTime() - 1000));
 
       (prismaMock.comment.findMany as jest.Mock).mockClear().mockResolvedValue([comment1]);
-      (prismaMock.commentLike.count as jest.Mock).mockClear().mockResolvedValue(0);
+      (prismaMock.commentLike.groupBy as jest.Mock).mockClear().mockResolvedValue([]);
       (prismaMock.comment.count as jest.Mock).mockClear().mockResolvedValue(1);
 
       await request(app)
@@ -753,7 +869,7 @@ describe('Comments API (mocked)', () => {
       const comment1 = createMockComment('comment-1', 'post-1', userId, new Date(now.getTime() - 1000));
 
       (prismaMock.comment.findMany as jest.Mock).mockClear().mockResolvedValue([comment1]);
-      (prismaMock.commentLike.count as jest.Mock).mockClear().mockResolvedValue(0);
+      (prismaMock.commentLike.groupBy as jest.Mock).mockClear().mockResolvedValue([]);
       (prismaMock.comment.count as jest.Mock).mockClear().mockResolvedValue(25);
 
       const res = await request(app)
@@ -780,9 +896,7 @@ describe('Comments API (mocked)', () => {
       const comment2 = createMockComment('comment-2', 'post-2', userId2, new Date(now.getTime() - 2000));
 
       (prismaMock.comment.findMany as jest.Mock).mockClear().mockResolvedValue([comment1, comment2]);
-      (prismaMock.commentLike.count as jest.Mock).mockClear()
-        .mockResolvedValueOnce(0)
-        .mockResolvedValueOnce(0);
+      (prismaMock.commentLike.groupBy as jest.Mock).mockClear().mockResolvedValue([]);
       (prismaMock.comment.count as jest.Mock).mockClear().mockResolvedValue(2);
 
       await request(app)
@@ -803,7 +917,7 @@ describe('Comments API (mocked)', () => {
       const comment1 = createMockComment('comment-1', 'post-1', userId, new Date(now.getTime() - 1000));
 
       (prismaMock.comment.findMany as jest.Mock).mockClear().mockResolvedValue([comment1]);
-      (prismaMock.commentLike.count as jest.Mock).mockClear().mockResolvedValue(0);
+      (prismaMock.commentLike.groupBy as jest.Mock).mockClear().mockResolvedValue([]);
       (prismaMock.comment.count as jest.Mock).mockClear().mockResolvedValue(1);
 
       const res = await request(app)
@@ -820,7 +934,7 @@ describe('Comments API (mocked)', () => {
       const comment1 = createMockComment('comment-1', 'post-1', userId, new Date(now.getTime() - 1000));
 
       (prismaMock.comment.findMany as jest.Mock).mockClear().mockResolvedValue([comment1]);
-      (prismaMock.commentLike.count as jest.Mock).mockClear().mockResolvedValue(0);
+      (prismaMock.commentLike.groupBy as jest.Mock).mockClear().mockResolvedValue([]);
       (prismaMock.comment.count as jest.Mock).mockClear().mockResolvedValue(1);
 
       const res = await request(app)
@@ -838,7 +952,9 @@ describe('Comments API (mocked)', () => {
       const comment1 = createMockComment('comment-1', 'post-1', userId, new Date(now.getTime() - 1000));
 
       (prismaMock.comment.findMany as jest.Mock).mockClear().mockResolvedValue([comment1]);
-      (prismaMock.commentLike.count as jest.Mock).mockClear().mockResolvedValue(7);
+      (prismaMock.commentLike.groupBy as jest.Mock).mockClear().mockResolvedValue([
+        { commentId: 'comment-1', _count: { commentId: 7 } },
+      ]);
       (prismaMock.comment.count as jest.Mock).mockClear().mockResolvedValue(1);
 
       const res = await request(app)
@@ -846,14 +962,12 @@ describe('Comments API (mocked)', () => {
         .expect(200);
 
       expect(res.body.comments[0]).toHaveProperty('likeCount', 7);
-      expect(prismaMock.commentLike.count).toHaveBeenCalledWith({
-        where: { commentId: 'comment-1' },
-      });
+      expect(prismaMock.commentLike.groupBy).toHaveBeenCalledTimes(1);
     });
 
     it('should return empty array when no comments exist', async () => {
       (prismaMock.comment.findMany as jest.Mock).mockClear().mockResolvedValue([]);
-      (prismaMock.commentLike.count as jest.Mock).mockClear();
+      (prismaMock.commentLike.groupBy as jest.Mock).mockClear().mockResolvedValue([]);
       (prismaMock.comment.count as jest.Mock).mockClear().mockResolvedValue(0);
 
       const res = await request(app)
@@ -874,7 +988,7 @@ describe('Comments API (mocked)', () => {
       const comment1 = createMockComment('comment-1', 'post-1', userId, new Date(now.getTime() - 1000));
 
       (prismaMock.comment.findMany as jest.Mock).mockClear().mockResolvedValue([comment1]);
-      (prismaMock.commentLike.count as jest.Mock).mockClear().mockResolvedValue(0);
+      (prismaMock.commentLike.groupBy as jest.Mock).mockClear().mockResolvedValue([]);
       (prismaMock.comment.count as jest.Mock).mockClear().mockResolvedValue(1);
 
       await request(app)
@@ -1024,7 +1138,7 @@ describe('Comments API (mocked)', () => {
           allowComments: true,
         });
         (prismaMock.comment.findMany as jest.Mock).mockResolvedValue([activeComment]);
-        (prismaMock.commentLike.count as jest.Mock).mockResolvedValue(0);
+        (prismaMock.commentLike.groupBy as jest.Mock).mockResolvedValue([]);
 
         const response = await request(app)
           .get(`/api/posts/${postId}/comments`)
@@ -1082,7 +1196,7 @@ describe('Comments API (mocked)', () => {
           .mockResolvedValueOnce([activeReply]) // Nested replies for comment-active
           .mockResolvedValueOnce([]); // No further nested replies
 
-        (prismaMock.commentLike.count as jest.Mock).mockResolvedValue(0);
+        (prismaMock.commentLike.groupBy as jest.Mock).mockResolvedValue([]);
 
         const response = await request(app)
           .get(`/api/posts/${postId}/comments`)
@@ -1126,7 +1240,7 @@ describe('Comments API (mocked)', () => {
           .mockResolvedValueOnce([activeComment]) // Top-level comments
           .mockResolvedValueOnce([]); // No replies (deactivated user's reply filtered out)
 
-        (prismaMock.commentLike.count as jest.Mock).mockResolvedValue(0);
+        (prismaMock.commentLike.groupBy as jest.Mock).mockResolvedValue([]);
 
         const response = await request(app)
           .get(`/api/posts/${postId}/comments`)
@@ -1157,7 +1271,7 @@ describe('Comments API (mocked)', () => {
         };
 
         (prismaMock.comment.findMany as jest.Mock).mockResolvedValue([activeComment]);
-        (prismaMock.commentLike.count as jest.Mock).mockResolvedValue(0);
+        (prismaMock.commentLike.groupBy as jest.Mock).mockResolvedValue([]);
         (prismaMock.comment.count as jest.Mock).mockResolvedValue(1);
 
         const response = await request(app)
@@ -1217,7 +1331,7 @@ describe('Comments API (mocked)', () => {
         };
 
         (prismaMock.comment.findMany as jest.Mock).mockResolvedValue([activeComment]);
-        (prismaMock.commentLike.count as jest.Mock).mockResolvedValue(0);
+        (prismaMock.commentLike.groupBy as jest.Mock).mockResolvedValue([]);
         (prismaMock.comment.count as jest.Mock).mockResolvedValue(1);
 
         const response = await request(app)
@@ -1276,7 +1390,7 @@ describe('Comments API (mocked)', () => {
           .mockResolvedValueOnce([activeReply2]) // Level 2 replies
           .mockResolvedValueOnce([]); // Level 3 replies (none)
 
-        (prismaMock.commentLike.count as jest.Mock).mockResolvedValue(0);
+        (prismaMock.commentLike.groupBy as jest.Mock).mockResolvedValue([]);
 
         const response = await request(app)
           .get(`/api/posts/${postId}/comments`)
