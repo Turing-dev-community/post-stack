@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authenticateToken } from '../utils/auth';
-import { validateComment } from '../middleware/validators';
+import { validateComment, validateCommentReport } from '../middleware/validators';
 import { handleValidationErrors } from '../middleware/validation';
 import { 
   getCommentsForPost,
@@ -10,6 +10,9 @@ import {
   unlikeComment,
   updateComment,
   deleteComment,
+  reportComment,
+  moderateComment,
+  getModerationQueue,
 } from '../controllers/commentsController';
 
 const router = Router();
@@ -56,6 +59,26 @@ router.delete(
   '/:postId/comments/:commentId',
   authenticateToken,
   deleteComment
+);
+
+router.post(
+  '/:postId/comments/:commentId/report',
+  authenticateToken,
+  validateCommentReport,
+  handleValidationErrors,
+  reportComment
+);
+
+router.patch(
+  '/:postId/comments/:commentId/moderate',
+  authenticateToken,
+  moderateComment
+);
+
+router.get(
+  '/:postId/moderation-queue',
+  authenticateToken,
+  getModerationQueue
 );
 
 export default router;

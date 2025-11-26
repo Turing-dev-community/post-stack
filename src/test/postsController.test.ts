@@ -1266,5 +1266,492 @@ describe('Posts Controller - Deactivated User Filtering (mocked)', () => {
         );      expect(prismaMock.post.create).not.toHaveBeenCalled();
     });
   });
+
+  describe('POST /api/posts - Featured Image', () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+      invalidateCache.invalidateAll();
+    });
+
+    it('should create post with featured image', async () => {
+      const postData = {
+        title: 'Post with Featured Image',
+        content: '# Test Content',
+        published: false,
+        featuredImage: 'https://example.com/featured-image.jpg',
+      };
+
+      const mockPost = {
+        id: 'post-1',
+        title: postData.title,
+        content: postData.content,
+        slug: 'post-with-featured-image',
+        published: postData.published,
+        featured: false,
+        featuredImage: postData.featuredImage,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        authorId: activeUserId,
+        categoryId: null,
+        metaTitle: null,
+        metaDescription: null,
+        ogImage: null,
+        viewCount: 0,
+        author: { id: activeUserId, username: 'activeuser' },
+        category: null,
+        tags: [],
+      };
+
+      (prismaMock.post.findUnique as jest.Mock).mockResolvedValue(null); // No existing post
+      (prismaMock.post.create as jest.Mock).mockResolvedValue(mockPost);
+      (prismaMock.postLike.count as jest.Mock).mockResolvedValue(0);
+
+      const response = await request(app)
+        .post('/api/posts')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send(postData)
+        .expect(201);
+
+      expect(response.body).toHaveProperty('message', 'Post created successfully');
+      expect(response.body.post.featuredImage).toBe(postData.featuredImage);
+      expect(prismaMock.post.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            featuredImage: postData.featuredImage,
+          }),
+        })
+      );
+    });
+
+    it('should create post without featured image (should be null)', async () => {
+      const postData = {
+        title: 'Post without Featured Image',
+        content: '# Test Content',
+        published: false,
+      };
+
+      const mockPost = {
+        id: 'post-2',
+        title: postData.title,
+        content: postData.content,
+        slug: 'post-without-featured-image',
+        published: postData.published,
+        featured: false,
+        featuredImage: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        authorId: activeUserId,
+        categoryId: null,
+        metaTitle: null,
+        metaDescription: null,
+        ogImage: null,
+        viewCount: 0,
+        author: { id: activeUserId, username: 'activeuser' },
+        category: null,
+        tags: [],
+      };
+
+      (prismaMock.post.findUnique as jest.Mock).mockResolvedValue(null);
+      (prismaMock.post.create as jest.Mock).mockResolvedValue(mockPost);
+      (prismaMock.postLike.count as jest.Mock).mockResolvedValue(0);
+
+      const response = await request(app)
+        .post('/api/posts')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send(postData)
+        .expect(201);
+
+      expect(response.body.post.featuredImage).toBeNull();
+    });
+
+    it('should reject post with invalid featured image URL', async () => {
+      const postData = {
+        title: 'Post with Invalid Featured Image',
+        content: '# Test Content',
+        published: false,
+        featuredImage: 'not-a-valid-url',
+      };
+
+      const response = await request(app)
+        .post('/api/posts')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send(postData)
+        .expect(400);
+
+      expect(response.body).toHaveProperty('error', 'ValidationError');
+    });
+
+    it('should accept null for featured image', async () => {
+      const postData = {
+        title: 'Post with Null Featured Image',
+        content: '# Test Content',
+        published: false,
+        featuredImage: null,
+      };
+
+      const mockPost = {
+        id: 'post-3',
+        title: postData.title,
+        content: postData.content,
+        slug: 'post-with-null-featured-image',
+        published: postData.published,
+        featured: false,
+        featuredImage: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        authorId: activeUserId,
+        categoryId: null,
+        metaTitle: null,
+        metaDescription: null,
+        ogImage: null,
+        viewCount: 0,
+        author: { id: activeUserId, username: 'activeuser' },
+        category: null,
+        tags: [],
+      };
+
+      (prismaMock.post.findUnique as jest.Mock).mockResolvedValue(null);
+      (prismaMock.post.create as jest.Mock).mockResolvedValue(mockPost);
+      (prismaMock.postLike.count as jest.Mock).mockResolvedValue(0);
+
+      const response = await request(app)
+        .post('/api/posts')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send(postData)
+        .expect(201);
+
+      expect(response.body.post.featuredImage).toBeNull();
+    });
+  });
+
+  describe('PUT /api/posts/:id - Featured Image', () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+      invalidateCache.invalidateAll();
+    });
+
+    it('should update post to add featured image', async () => {
+      const postId = 'post-to-update';
+      const existingPost = {
+        id: postId,
+        title: 'Post without Featured Image',
+        content: '# Original Content',
+        slug: 'post-without-featured-image-update',
+        published: false,
+        featured: false,
+        featuredImage: null,
+        createdAt: new Date('2024-01-01'),
+        updatedAt: new Date('2024-01-01'),
+        authorId: activeUserId,
+        categoryId: null,
+        metaTitle: null,
+        metaDescription: null,
+        ogImage: null,
+        viewCount: 0,
+      };
+
+      const updateData = {
+        title: 'Post without Featured Image',
+        content: '# Original Content',
+        featuredImage: 'https://example.com/new-featured-image.jpg',
+      };
+
+      (prismaMock.post.findUnique as jest.Mock).mockResolvedValueOnce(existingPost);
+
+      (prismaMock.$transaction as jest.Mock).mockImplementation(async (callback: any) => {
+        return callback({
+          postTag: {
+            deleteMany: jest.fn().mockResolvedValue({}),
+          },
+          post: {
+            update: jest.fn().mockResolvedValue({
+              ...existingPost,
+              featuredImage: updateData.featuredImage,
+              updatedAt: new Date(),
+              author: { id: activeUserId, username: 'activeuser' },
+              category: null,
+              tags: [],
+            }),
+          },
+        });
+      });
+
+      (prismaMock.postLike.count as jest.Mock).mockResolvedValue(0);
+
+      const response = await request(app)
+        .put(`/api/posts/${postId}`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send(updateData)
+        .expect(200);
+
+      expect(response.body.post.featuredImage).toBe(updateData.featuredImage);
+    });
+
+    it('should update post to change featured image URL', async () => {
+      const postId = 'post-to-update';
+      const existingPost = {
+        id: postId,
+        title: 'Post with Featured Image',
+        content: '# Original Content',
+        slug: 'post-with-featured-image-update',
+        published: false,
+        featured: false,
+        featuredImage: 'https://example.com/old-featured-image.jpg',
+        createdAt: new Date('2024-01-01'),
+        updatedAt: new Date('2024-01-01'),
+        authorId: activeUserId,
+        categoryId: null,
+        metaTitle: null,
+        metaDescription: null,
+        ogImage: null,
+        viewCount: 0,
+      };
+
+      const updateData = {
+        title: 'Post with Featured Image',
+        content: '# Original Content',
+        featuredImage: 'https://example.com/new-featured-image.jpg',
+      };
+
+      (prismaMock.post.findUnique as jest.Mock).mockResolvedValueOnce(existingPost);
+
+      (prismaMock.$transaction as jest.Mock).mockImplementation(async (callback: any) => {
+        return callback({
+          postTag: {
+            deleteMany: jest.fn().mockResolvedValue({}),
+          },
+          post: {
+            update: jest.fn().mockResolvedValue({
+              ...existingPost,
+              featuredImage: updateData.featuredImage,
+              updatedAt: new Date(),
+              author: { id: activeUserId, username: 'activeuser' },
+              category: null,
+              tags: [],
+            }),
+          },
+        });
+      });
+
+      (prismaMock.postLike.count as jest.Mock).mockResolvedValue(0);
+
+      const response = await request(app)
+        .put(`/api/posts/${postId}`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send(updateData)
+        .expect(200);
+
+      expect(response.body.post.featuredImage).toBe(updateData.featuredImage);
+    });
+
+    it('should update post to remove featured image (set to null)', async () => {
+      const postId = 'post-to-update';
+      const existingPost = {
+        id: postId,
+        title: 'Post with Featured Image to Remove',
+        content: '# Original Content',
+        slug: 'post-with-featured-image-remove',
+        published: false,
+        featured: false,
+        featuredImage: 'https://example.com/featured-image.jpg',
+        createdAt: new Date('2024-01-01'),
+        updatedAt: new Date('2024-01-01'),
+        authorId: activeUserId,
+        categoryId: null,
+        metaTitle: null,
+        metaDescription: null,
+        ogImage: null,
+        viewCount: 0,
+      };
+
+      const updateData = {
+        title: 'Post with Featured Image to Remove',
+        content: '# Original Content',
+        featuredImage: null,
+      };
+
+      (prismaMock.post.findUnique as jest.Mock).mockResolvedValueOnce(existingPost);
+
+      (prismaMock.$transaction as jest.Mock).mockImplementation(async (callback: any) => {
+        return callback({
+          postTag: {
+            deleteMany: jest.fn().mockResolvedValue({}),
+          },
+          post: {
+            update: jest.fn().mockResolvedValue({
+              ...existingPost,
+              featuredImage: null,
+              updatedAt: new Date(),
+              author: { id: activeUserId, username: 'activeuser' },
+              category: null,
+              tags: [],
+            }),
+          },
+        });
+      });
+
+      (prismaMock.postLike.count as jest.Mock).mockResolvedValue(0);
+
+      const response = await request(app)
+        .put(`/api/posts/${postId}`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send(updateData)
+        .expect(200);
+
+      expect(response.body.post.featuredImage).toBeNull();
+    });
+
+    it('should reject update with invalid featured image URL', async () => {
+      const postId = 'post-to-update';
+      const existingPost = {
+        id: postId,
+        title: 'Test Post',
+        content: '# Test Content',
+        slug: 'test-post-invalid-featured',
+        published: false,
+        featured: false,
+        featuredImage: null,
+        createdAt: new Date('2024-01-01'),
+        updatedAt: new Date('2024-01-01'),
+        authorId: activeUserId,
+        categoryId: null,
+        metaTitle: null,
+        metaDescription: null,
+        ogImage: null,
+        viewCount: 0,
+      };
+
+      (prismaMock.post.findUnique as jest.Mock).mockResolvedValueOnce(existingPost);
+
+      const updateData = {
+        title: 'Test Post',
+        content: '# Test Content',
+        featuredImage: 'not-a-valid-url',
+      };
+
+      const response = await request(app)
+        .put(`/api/posts/${postId}`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send(updateData)
+        .expect(400);
+
+      expect(response.body).toHaveProperty('error', 'ValidationError');
+    });
+  });
+
+  describe('GET /api/posts/:slug - Featured Image', () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+      invalidateCache.invalidateAll();
+    });
+
+    it('should return post with featured image', async () => {
+      const activePost = {
+        id: 'post-with-featured',
+        title: 'Post with Featured Image',
+        content: '# Test Content',
+        slug: 'post-with-featured-image-get',
+        published: true,
+        featured: false,
+        featuredImage: 'https://example.com/featured-image.jpg',
+        createdAt: new Date('2024-01-01'),
+        updatedAt: new Date('2024-01-01'),
+        authorId: activeUserId,
+        categoryId: null,
+        metaTitle: null,
+        metaDescription: null,
+        ogImage: null,
+        viewCount: 0,
+        author: { id: activeUserId, username: 'activeuser', deletedAt: null },
+        category: null,
+        tags: [],
+      };
+
+      (prismaMock.post.findUnique as jest.Mock).mockResolvedValue(activePost);
+      (prismaMock.postLike.count as jest.Mock).mockResolvedValue(0);
+      (prismaMock.post.update as jest.Mock).mockResolvedValue({ ...activePost, viewCount: 1 });
+
+      const response = await request(app)
+        .get('/api/posts/post-with-featured-image-get')
+        .expect(200);
+
+      expect(response.body.post.featuredImage).toBe('https://example.com/featured-image.jpg');
+    });
+
+    it('should return null for featured image when not set', async () => {
+      const activePost = {
+        id: 'post-without-featured',
+        title: 'Post without Featured Image',
+        content: '# Test Content',
+        slug: 'post-without-featured-image-get',
+        published: true,
+        featured: false,
+        featuredImage: null,
+        createdAt: new Date('2024-01-01'),
+        updatedAt: new Date('2024-01-01'),
+        authorId: activeUserId,
+        categoryId: null,
+        metaTitle: null,
+        metaDescription: null,
+        ogImage: null,
+        viewCount: 0,
+        author: { id: activeUserId, username: 'activeuser', deletedAt: null },
+        category: null,
+        tags: [],
+      };
+
+      (prismaMock.post.findUnique as jest.Mock).mockResolvedValue(activePost);
+      (prismaMock.postLike.count as jest.Mock).mockResolvedValue(0);
+      (prismaMock.post.update as jest.Mock).mockResolvedValue({ ...activePost, viewCount: 1 });
+
+      const response = await request(app)
+        .get('/api/posts/post-without-featured-image-get')
+        .expect(200);
+
+      expect(response.body.post.featuredImage).toBeNull();
+    });
+  });
+
+  describe('GET /api/posts - Featured Image in List', () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+      invalidateCache.invalidateAll();
+    });
+
+    it('should return featured image in posts list', async () => {
+      const post = {
+        id: 'post-with-featured-list',
+        title: 'Post with Featured Image in List',
+        content: '# Test Content',
+        slug: 'post-with-featured-image-list',
+        published: true,
+        featured: false,
+        featuredImage: 'https://example.com/featured-image-list.jpg',
+        createdAt: new Date('2024-01-01'),
+        updatedAt: new Date('2024-01-01'),
+        authorId: activeUserId,
+        categoryId: null,
+        metaTitle: null,
+        metaDescription: null,
+        ogImage: null,
+        viewCount: 0,
+        author: { id: activeUserId, username: 'activeuser' },
+        category: null,
+        tags: [],
+      };
+
+      (prismaMock.post.findMany as jest.Mock).mockResolvedValue([post]);
+      (prismaMock.postLike.count as jest.Mock).mockResolvedValue(0);
+      (prismaMock.post.count as jest.Mock).mockResolvedValue(1);
+
+      const response = await request(app)
+        .get('/api/posts')
+        .expect(200);
+
+      expect(response.body.posts).toHaveLength(1);
+      expect(response.body.posts[0].featuredImage).toBe('https://example.com/featured-image-list.jpg');
+    });
+  });
+
 });
 
