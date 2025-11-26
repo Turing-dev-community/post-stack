@@ -297,7 +297,7 @@ describe('Top Commenter Feature', () => {
 
       (prismaMock.post.findUnique as jest.Mock).mockResolvedValue(mockPost);
       (prismaMock.comment.findMany as jest.Mock).mockResolvedValue(mockComments);
-      (prismaMock.commentLike.count as jest.Mock).mockResolvedValue(0);
+      (prismaMock.commentLike.groupBy as jest.Mock).mockResolvedValue([]);
       (prismaMock.userCommenterStats.findMany as jest.Mock).mockResolvedValue([
         {
           commenterId: userId,
@@ -332,7 +332,7 @@ describe('Top Commenter Feature', () => {
 
       (prismaMock.post.findUnique as jest.Mock).mockResolvedValue(mockPost);
       (prismaMock.comment.findMany as jest.Mock).mockResolvedValue(mockComments);
-      (prismaMock.commentLike.count as jest.Mock).mockResolvedValue(0);
+      (prismaMock.commentLike.groupBy as jest.Mock).mockResolvedValue([]);
       (prismaMock.userCommenterStats.findMany as jest.Mock).mockResolvedValue([
         {
           commenterId: userId,
@@ -367,7 +367,7 @@ describe('Top Commenter Feature', () => {
 
       (prismaMock.post.findUnique as jest.Mock).mockResolvedValue(mockPost);
       (prismaMock.comment.findMany as jest.Mock).mockResolvedValue(mockComments);
-      (prismaMock.commentLike.count as jest.Mock).mockResolvedValue(0);
+      (prismaMock.commentLike.groupBy as jest.Mock).mockResolvedValue([]);
       (prismaMock.userCommenterStats.findMany as jest.Mock).mockResolvedValue([]);
 
       const res = await request(app).get(`/api/posts/${postId}/comments`).expect(200);
@@ -396,7 +396,7 @@ describe('Top Commenter Feature', () => {
       ];
 
       (prismaMock.comment.findMany as jest.Mock).mockResolvedValue(mockComments);
-      (prismaMock.commentLike.count as jest.Mock).mockResolvedValue(0);
+      (prismaMock.commentLike.groupBy as jest.Mock).mockResolvedValue([]);
       (prismaMock.comment.count as jest.Mock).mockResolvedValue(1);
       (prismaMock.userCommenterStats.findMany as jest.Mock).mockResolvedValue([
         {
@@ -447,7 +447,7 @@ describe('Top Commenter Feature', () => {
         .mockResolvedValueOnce([reply])
         .mockResolvedValueOnce([]);
 
-      (prismaMock.commentLike.count as jest.Mock).mockResolvedValue(0);
+      (prismaMock.commentLike.groupBy as jest.Mock).mockResolvedValue([]);
 
       (prismaMock.userCommenterStats.findMany as jest.Mock)
         .mockResolvedValueOnce([
@@ -507,7 +507,7 @@ describe('Top Commenter Feature', () => {
 
       (prismaMock.post.findUnique as jest.Mock).mockResolvedValue(mockPost);
       (prismaMock.comment.findMany as jest.Mock).mockResolvedValue(mockComments);
-      (prismaMock.commentLike.count as jest.Mock).mockResolvedValue(0);
+      (prismaMock.commentLike.groupBy as jest.Mock).mockResolvedValue([]);
       (prismaMock.userCommenterStats.findMany as jest.Mock).mockResolvedValue([
         { commenterId: 'user-1', commentCount: 5 },
         { commenterId: 'user-2', commentCount: 2 },
@@ -543,7 +543,7 @@ describe('Top Commenter Feature', () => {
 
       (prismaMock.post.findUnique as jest.Mock).mockResolvedValue(mockPost);
       (prismaMock.comment.findMany as jest.Mock).mockResolvedValue(mockComments);
-      (prismaMock.commentLike.count as jest.Mock).mockResolvedValue(0);
+      (prismaMock.commentLike.groupBy as jest.Mock).mockResolvedValue([]);
       (prismaMock.userCommenterStats.findMany as jest.Mock).mockResolvedValue([]);
 
       const res = await request(app).get(`/api/posts/${postId}/comments`).expect(200);

@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { AuthRequest } from '../utils/auth';
 import * as reportsService from '../services/reportsService';
+import * as commentReportsService from '../services/commentReportsService';
 import { ReportStatus } from '@prisma/client';
 import { checkAuth, checkAdmin } from '../utils/authDecorator';
 
@@ -38,6 +39,41 @@ export async function updateReportStatus(req: AuthRequest, res: Response): Promi
   }
   try {
     const updated = await reportsService.updatePostReportStatus(id, status as ReportStatus);
+    return res.json({ report: updated });
+  } catch (e: any) {
+    const message = e.message || 'Failed to update report';
+    const httpStatus = message === 'Report not found' ? 404 : 400;
+    return res.status(httpStatus).json({ error: message });
+  }
+}
+
+export async function getCommentReports(req: AuthRequest, res: Response): Promise<Response> {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+  if (req.user.role !== 'ADMIN') {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+  const page = parseInt(req.query.page as string) || 1;
+  const limit = parseInt(req.query.limit as string) || 20;
+  const data = await commentReportsService.listCommentReports(page, limit);
+  return res.json(data);
+}
+
+export async function updateCommentReportStatus(req: AuthRequest, res: Response): Promise<Response> {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+  if (req.user.role !== 'ADMIN') {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+  const { id } = req.params;
+  const { status } = req.body;
+  if (!status || !['PENDING', 'REVIEWED', 'REJECTED'].includes(status)) {
+    return res.status(400).json({ error: 'Invalid status' });
+  }
+  try {
+    const updated = await commentReportsService.updateCommentReportStatus(id, status as ReportStatus);
     return res.json({ report: updated });
   } catch (e: any) {
     const message = e.message || 'Failed to update report';

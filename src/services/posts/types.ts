@@ -27,6 +27,7 @@ export interface CreatePostData {
 	metaDescription?: string | null;
 	ogImage?: string | null;
 	excerpt?: string | null;
+	featuredImage?: string | null;
 	tags?: string[];
 	scheduledAt?: string | null;
 }
