@@ -97,6 +97,11 @@ export const validatePost = [
     .trim()
     .isURL()
     .withMessage("OG image must be a valid URL"),
+  body("featuredImage")
+    .optional({ nullable: true })
+    .trim()
+    .isURL()
+    .withMessage("Featured image must be a valid URL"),
   body("tags")
     .optional()
     .isArray()
@@ -171,6 +176,16 @@ export const validateBulkPosts = [
         }
         if (post.ogImage !== undefined && post.ogImage !== null && typeof post.ogImage !== "string") {
           throw new Error(`Post at index ${i}: ogImage must be a string or null`);
+        }
+        if (post.featuredImage !== undefined && post.featuredImage !== null && typeof post.featuredImage !== "string") {
+          throw new Error(`Post at index ${i}: featuredImage must be a string or null`);
+        }
+        if (post.featuredImage !== undefined && post.featuredImage !== null) {
+          try {
+            new URL(post.featuredImage);
+          } catch {
+            throw new Error(`Post at index ${i}: featuredImage must be a valid URL`);
+          }
         }
         if (post.tags !== undefined) {
           if (!Array.isArray(post.tags)) {
