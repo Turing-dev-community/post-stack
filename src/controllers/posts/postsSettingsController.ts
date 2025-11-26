@@ -1,16 +1,13 @@
 import { Response } from 'express';
 import { AuthRequest } from '../../utils/auth';
 import * as postsService from '../../services/posts';
+import { checkAuth } from '../../utils/authDecorator';
 
 /**
  * Update comment settings for a post
  */
 export async function updateCommentSettings(req: AuthRequest, res: Response): Promise<Response> {
-  if (!req.user) {
-    return res.status(401).json({
-      error: 'Authentication required',
-    });
-  }
+  if (!checkAuth(req, res)) return res as Response;
 
   const { id } = req.params;
   const { allowComments } = req.body as { allowComments: boolean };

@@ -2,13 +2,10 @@ import { Response } from 'express';
 import { AuthRequest } from '../utils/auth';
 import { asyncHandler } from '../middleware/validation';
 import { followUser as followUserService, unfollowUser as unfollowUserService, getFollowers as getFollowersService, getFollowing as getFollowingService, getUserPublicProfile as getUserPublicProfileService, getUserActivity as getUserActivityService} from '../services/usersService';
+import { checkAuth } from '../utils/authDecorator';
 
 export const followUser = asyncHandler(async (req: AuthRequest, res: Response) => {
-  if (!req.user) {
-    return res.status(401).json({
-      error: 'Authentication required',
-    });
-  }
+  if (!checkAuth(req, res)) return;
 
   const { userId } = req.params;
   const followerId = req.user.id;
@@ -47,11 +44,7 @@ export const followUser = asyncHandler(async (req: AuthRequest, res: Response) =
 });
 
 export const unfollowUser = asyncHandler(async (req: AuthRequest, res: Response) => {
-  if (!req.user) {
-    return res.status(401).json({
-      error: 'Authentication required',
-    });
-  }
+  if (!checkAuth(req, res)) return;
 
   const { userId } = req.params;
   const followerId = req.user.id;

@@ -1,16 +1,13 @@
 import { Response } from 'express';
 import { AuthRequest } from '../../utils/auth';
 import * as postsService from '../../services/posts';
+import { checkAuth } from '../../utils/authDecorator';
 
 /**
  * Like a post
  */
 export async function likePost(req: AuthRequest, res: Response): Promise<Response> {
-  if (!req.user) {
-    return res.status(401).json({
-      error: 'Authentication required',
-    });
-  }
+  if (!checkAuth(req, res)) return res as Response;
 
   const { id } = req.params;
 
@@ -39,11 +36,7 @@ export async function likePost(req: AuthRequest, res: Response): Promise<Respons
  * Unlike a post
  */
 export async function unlikePost(req: AuthRequest, res: Response): Promise<Response> {
-  if (!req.user) {
-    return res.status(401).json({
-      error: 'Authentication required',
-    });
-  }
+  if (!checkAuth(req, res)) return res as Response;
 
   const { id } = req.params;
 
@@ -72,11 +65,7 @@ export async function unlikePost(req: AuthRequest, res: Response): Promise<Respo
  * Save a post
  */
 export async function savePost(req: AuthRequest, res: Response): Promise<Response> {
-  if (!req.user) {
-    return res.status(401).json({
-      error: 'Authentication required',
-    });
-  }
+  if (!checkAuth(req, res)) return res as Response;
 
   const { id } = req.params;
 
@@ -104,11 +93,7 @@ export async function savePost(req: AuthRequest, res: Response): Promise<Respons
  * Unsave a post
  */
 export async function unsavePost(req: AuthRequest, res: Response): Promise<Response> {
-  if (!req.user) {
-    return res.status(401).json({
-      error: 'Authentication required',
-    });
-  }
+  if (!checkAuth(req, res)) return res as Response;
 
   const { id } = req.params;
 

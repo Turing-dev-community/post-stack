@@ -1,6 +1,7 @@
 import { Response } from "express";
 import { AuthRequest } from "../../utils/auth";
 import * as postsService from "../../services/posts";
+import { checkAuth } from "../../utils/authDecorator";
 
 /**
  * Create a new post
@@ -9,11 +10,7 @@ export async function createPost(
 	req: AuthRequest,
 	res: Response
 ): Promise<Response> {
-	if (!req.user) {
-		return res.status(401).json({
-			error: "Authentication required",
-		});
-	}
+	if (!checkAuth(req, res)) return res as Response;
 
 	const {
 		title,
@@ -68,11 +65,7 @@ export async function updatePost(
 	req: AuthRequest,
 	res: Response
 ): Promise<Response> {
-	if (!req.user) {
-		return res.status(401).json({
-			error: "Authentication required",
-		});
-	}
+	if (!checkAuth(req, res)) return res as Response;
 
 	const { id } = req.params;
 	const {
@@ -132,11 +125,7 @@ export async function deletePost(
 	req: AuthRequest,
 	res: Response
 ): Promise<Response> {
-	if (!req.user) {
-		return res.status(401).json({
-			error: "Authentication required",
-		});
-	}
+	if (!checkAuth(req, res)) return res as Response;
 
 	const { id } = req.params;
 
@@ -167,11 +156,7 @@ export async function schedulePost(
 	req: AuthRequest,
 	res: Response
 ): Promise<Response> {
-	if (!req.user) {
-		return res.status(401).json({
-			error: "Authentication required",
-		});
-	}
+	if (!checkAuth(req, res)) return res as Response;
 
 	const { id } = req.params;
 	const { scheduledAt } = req.body;
@@ -220,11 +205,7 @@ export async function unschedulePost(
 	req: AuthRequest,
 	res: Response
 ): Promise<Response> {
-	if (!req.user) {
-		return res.status(401).json({
-			error: "Authentication required",
-		});
-	}
+	if (!checkAuth(req, res)) return res as Response;
 
 	const { id } = req.params;
 	const { publishNow } = req.body;
@@ -267,11 +248,7 @@ export async function bulkCreatePosts(
 	req: AuthRequest,
 	res: Response
 ): Promise<Response> {
-	if (!req.user) {
-		return res.status(401).json({
-			error: "Authentication required",
-		});
-	}
+	if (!checkAuth(req, res)) return res as Response;
 
 	const { posts } = req.body;
 

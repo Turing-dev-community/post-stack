@@ -2,11 +2,11 @@ import { Response } from 'express';
 import { AuthRequest } from '../utils/auth';
 import * as reportsService from '../services/reportsService';
 import { ReportStatus } from '@prisma/client';
+import { checkAuth, checkAdmin } from '../utils/authDecorator';
 
 export async function reportPost(req: AuthRequest, res: Response): Promise<Response> {
-  if (!req.user) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
+  if (!checkAuth(req, res)) return res as Response;
+  
   const { postId } = req.params;
   const { reason } = req.body;
   try {
@@ -20,12 +20,8 @@ export async function reportPost(req: AuthRequest, res: Response): Promise<Respo
 }
 
 export async function getReports(req: AuthRequest, res: Response): Promise<Response> {
-  if (!req.user) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
-  if (req.user.role !== 'ADMIN') {
-    return res.status(403).json({ error: 'Admin access required' });
-  }
+  if (!checkAdmin(req, res)) return res as Response;
+  
   const page = parseInt(req.query.page as string) || 1;
   const limit = parseInt(req.query.limit as string) || 20;
   const data = await reportsService.listPostReports(page, limit);
@@ -33,12 +29,8 @@ export async function getReports(req: AuthRequest, res: Response): Promise<Respo
 }
 
 export async function updateReportStatus(req: AuthRequest, res: Response): Promise<Response> {
-  if (!req.user) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
-  if (req.user.role !== 'ADMIN') {
-    return res.status(403).json({ error: 'Admin access required' });
-  }
+  if (!checkAdmin(req, res)) return res as Response;
+  
   const { id } = req.params;
   const { status } = req.body;
   if (!status || !['PENDING', 'REVIEWED', 'REJECTED'].includes(status)) {
