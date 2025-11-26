@@ -546,6 +546,8 @@ describe('Comment Reporting and Moderation API', () => {
       (prismaMock.comment.findMany as jest.Mock).mockResolvedValue(visibleComments);
       (prismaMock.commentLike.count as jest.Mock).mockResolvedValue(0);
       (prismaMock.userCommenterStats.findMany as jest.Mock).mockResolvedValue([]);
+      (prismaMock.commentLike.groupBy as jest.Mock).mockClear().mockResolvedValue([]);
+
 
 
       const res = await request(app)
@@ -595,6 +597,8 @@ describe('Comment Reporting and Moderation API', () => {
       (prismaMock.comment.findMany as jest.Mock).mockResolvedValue(allComments);
       (prismaMock.commentLike.count as jest.Mock).mockResolvedValue(0);
       (prismaMock.userCommenterStats.findMany as jest.Mock).mockResolvedValue([]);
+      (prismaMock.commentLike.groupBy as jest.Mock).mockClear().mockResolvedValue([]);
+
 
       const res = await request(app)
         .get(`/api/posts/${postId}/comments`)
