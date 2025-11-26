@@ -4,6 +4,8 @@ import { asyncHandler } from '../middleware/validation';
 import { prisma } from '../lib/prisma';
 import { invalidateCache } from '../middleware/cache';
 import { NotFoundError, ForbiddenError, UnauthorizedError } from '../utils/errors';
+import { ModerationStatus } from '@prisma/client';
+import * as commentReportsService from '../services/commentReportsService';
 import { updateCommenterStats, decrementCommenterStats, checkMultipleTopCommenters } from '../services/commenterStatsService';
 
 async function getThreadDepth(commentId: string, depth: number = 0): Promise<number> {
@@ -27,7 +29,7 @@ async function softDeleteReplies(parentId: string): Promise<void> {
   const replies = await prisma.comment.findMany({
     where: {
       parentId: parentId,
-      deletedAt: null, 
+      deletedAt: null,
     },
     select: { id: true },
   });
@@ -42,20 +44,27 @@ async function softDeleteReplies(parentId: string): Promise<void> {
   }
 }
 
-async function getNestedReplies(postId: string, parentId: string, postAuthorId: string, currentDepth: number = 0): Promise<any[]> {
+async function getNestedReplies(postId: string, parentId: string, currentDepth: number = 0, postAuthorId: string, userId?: string, isPostAuthor?: boolean): Promise<any[]> {
   if (currentDepth >= 5) {
     return [];
   }
 
-  const replies = await prisma.comment.findMany({
-    where: {
-      parentId: parentId,
-      postId: postId,
-      deletedAt: null, 
-      user: {
-        deletedAt: null, // Filter out comments from deactivated users
-      },
+  const whereClause: any = {
+    parentId: parentId,
+    postId: postId,
+    deletedAt: null,
+    user: {
+      deletedAt: null, // Filter out comments from deactivated users
     },
+  };
+
+  // Hide comments with HIDDEN status unless viewer is the post author
+  if (!isPostAuthor) {
+    whereClause.moderationStatus = { not: ModerationStatus.HIDDEN };
+  }
+
+  const replies = await prisma.comment.findMany({
+    where: whereClause,
     include: {
       user: {
         select: {
@@ -81,12 +90,14 @@ async function getNestedReplies(postId: string, parentId: string, postAuthorId: 
         postId: reply.postId,
         userId: reply.userId,
         parentId: reply.parentId,
+        moderationStatus: reply.moderationStatus,
         createdAt: reply.createdAt,
         updatedAt: reply.updatedAt,
         user: reply.user,
         likeCount,
+        replies: await getNestedReplies(postId, reply.id, currentDepth + 1, postAuthorId, userId, isPostAuthor),
         isTopCommenter: topCommenterMap.get(reply.userId) || false,
-        replies: await getNestedReplies(postId, reply.id, postAuthorId, currentDepth + 1),
+
       };
     })
   );
@@ -113,15 +124,25 @@ export const getCommentsForPost = asyncHandler(async (req: AuthRequest, res: Res
     });
   }
 
-  const comments = await prisma.comment.findMany({
-    where: { 
-      postId, 
-      parentId: null,
-      deletedAt: null, // Filter out soft-deleted comments
-      user: {
-        deletedAt: null, // Filter out comments from deactivated users
-      },
+  // Check if the current user is the post author
+  const isPostAuthor = req.user?.id === post.authorId;
+
+  const whereClause: any = {
+    postId,
+    parentId: null,
+    deletedAt: null, // Filter out soft-deleted comments
+    user: {
+      deletedAt: null, // Filter out comments from deactivated users
     },
+  };
+
+  // Hide comments with HIDDEN status unless viewer is the post author
+  if (!isPostAuthor) {
+    whereClause.moderationStatus = { not: ModerationStatus.HIDDEN };
+  }
+
+  const comments = await prisma.comment.findMany({
+    where: whereClause,
     include: {
       user: {
         select: {
@@ -147,12 +168,13 @@ export const getCommentsForPost = asyncHandler(async (req: AuthRequest, res: Res
         postId: comment.postId,
         userId: comment.userId,
         parentId: comment.parentId,
+        moderationStatus: comment.moderationStatus,
         createdAt: comment.createdAt,
         updatedAt: comment.updatedAt,
         user: comment.user,
         likeCount,
+        replies: await getNestedReplies(postId, comment.id, 0, post.authorId, req.user?.id, isPostAuthor),
         isTopCommenter: topCommenterMap.get(comment.userId) || false,
-        replies: await getNestedReplies(postId, comment.id, post.authorId, 0),
       };
     })
   );
@@ -479,7 +501,7 @@ export const deleteComment = asyncHandler(async (req: AuthRequest, res: Response
   }
 
   const comment = await prisma.comment.findFirst({
-    where: { 
+    where: {
       id: commentId,
       deletedAt: null,
     },
@@ -523,7 +545,7 @@ export const getRecentComments = asyncHandler(async (req: AuthRequest, res: Resp
   const comments = await prisma.comment.findMany({
     where: {
       parentId: null, // Only top-level comments
-      deletedAt: null, 
+      deletedAt: null,
       user: {
         deletedAt: null, // Filter out comments from deactivated users
       },
@@ -597,7 +619,7 @@ export const getRecentComments = asyncHandler(async (req: AuthRequest, res: Resp
   const total = await prisma.comment.count({
     where: {
       parentId: null,
-      deletedAt: null, 
+      deletedAt: null,
       user: {
         deletedAt: null, // Filter out comments from deactivated users
       },
@@ -614,6 +636,177 @@ export const getRecentComments = asyncHandler(async (req: AuthRequest, res: Resp
       limit,
       total,
       totalPages: Math.ceil(total / limit),
+    },
+  });
+});
+
+
+export const reportComment = asyncHandler(async (req: AuthRequest, res: Response) => {
+  if (!req.user) {
+    return res.status(401).json({
+      error: 'Authentication required',
+    });
+  }
+
+  const { postId, commentId } = req.params;
+  const { reason } = req.body;
+
+  const comment = await prisma.comment.findUnique({
+    where: { id: commentId },
+  });
+
+  if (!comment || comment.postId !== postId) {
+    return res.status(404).json({
+      error: 'Comment not found',
+    });
+  }
+
+  try {
+    const report = await commentReportsService.createCommentReport(commentId, req.user.id, reason);
+    return res.status(201).json({
+      message: 'Comment reported successfully',
+      report,
+    });
+  } catch (e: any) {
+    const message = e.message || 'Failed to create report';
+    const status = message === 'Comment not found' ? 404 : message === 'You have already reported this comment' ? 409 : 400;
+    return res.status(status).json({ error: message });
+  }
+});
+
+
+export const moderateComment = asyncHandler(async (req: AuthRequest, res: Response) => {
+  if (!req.user) {
+    throw new UnauthorizedError('Authentication required');
+  }
+
+  const { postId, commentId } = req.params;
+  const { action } = req.body;
+
+  if (!['approve', 'hide'].includes(action)) {
+    return res.status(400).json({
+      error: 'Invalid action. Must be "approve" or "hide"',
+    });
+  }
+
+  const post = await prisma.post.findUnique({
+    where: { id: postId },
+  });
+
+  if (!post) {
+    throw new NotFoundError('Post not found');
+  }
+
+  if (post.authorId !== req.user.id) {
+    throw new ForbiddenError('Only the post author can moderate comments');
+  }
+
+  const comment = await prisma.comment.findUnique({
+    where: { id: commentId },
+  });
+
+  if (!comment || comment.postId !== postId) {
+    throw new NotFoundError('Comment not found');
+  }
+
+  const moderationStatus = action === 'hide' ? ModerationStatus.HIDDEN : ModerationStatus.APPROVED;
+
+  const updatedComment = await prisma.comment.update({
+    where: { id: commentId },
+    data: { moderationStatus },
+    include: {
+      user: {
+        select: {
+          id: true,
+          username: true,
+        },
+      },
+    },
+  });
+
+  invalidateCache.invalidatePostCache(post.slug);
+
+  return res.json({
+    message: `Comment ${action === 'hide' ? 'hidden' : 'approved'} successfully`,
+    comment: {
+      ...updatedComment,
+      moderationStatus: updatedComment.moderationStatus,
+    },
+  });
+});
+
+export const getModerationQueue = asyncHandler(async (req: AuthRequest, res: Response) => {
+  if (!req.user) {
+    throw new UnauthorizedError('Authentication required');
+  }
+
+  const { postId } = req.params;
+  const status = req.query.status as string | undefined;
+
+  const post = await prisma.post.findUnique({
+    where: { id: postId },
+  });
+
+  if (!post) {
+    throw new NotFoundError('Post not found');
+  }
+
+  if (post.authorId !== req.user.id) {
+    throw new ForbiddenError('Only the post author can view the moderation queue');
+  }
+
+  const whereClause: any = {
+    postId,
+    user: {
+      deletedAt: null,
+    },
+  };
+
+  if (status && ['PENDING', 'APPROVED', 'HIDDEN'].includes(status)) {
+    whereClause.moderationStatus = status;
+  }
+
+  const comments = await prisma.comment.findMany({
+    where: whereClause,
+    include: {
+      user: {
+        select: {
+          id: true,
+          username: true,
+        },
+      },
+      reports: {
+        include: {
+          reporter: {
+            select: {
+              id: true,
+              username: true,
+            },
+          },
+        },
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  const commentsWithLikes = await Promise.all(
+    comments.map(async (comment: any) => {
+      const likeCount = await prisma.commentLike.count({
+        where: { commentId: comment.id },
+      });
+      return {
+        ...comment,
+        likeCount,
+      };
+    })
+  );
+
+  return res.json({
+    comments: commentsWithLikes,
+    post: {
+      id: post.id,
+      title: post.title,
+      slug: post.slug,
     },
   });
 });

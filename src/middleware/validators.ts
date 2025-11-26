@@ -283,6 +283,14 @@ export const validatePostReport = [
     .withMessage("Reason must be between 5 and 500 characters"),
 ];
 
+export const validateCommentReport = [
+  body("reason")
+    .trim()
+    .customSanitizer(sanitizeText)
+    .isLength({ min: 5, max: 500 })
+    .withMessage("Reason must be between 5 and 500 characters"),
+];
+
 export const validateTag = [
   body("name")
     .trim()
