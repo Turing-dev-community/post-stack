@@ -50,6 +50,7 @@ export async function createPost(data: CreatePostData, userId: string) {
 			metaDescription: data.metaDescription,
 			ogImage: data.ogImage,
 			excerpt: finalExcerpt,
+			featuredImage: data.featuredImage,
 			...(scheduledDate ? ({ scheduledAt: scheduledDate } as any) : {}),
 			tags:
 				data.tags && data.tags.length > 0
@@ -159,6 +160,7 @@ export async function updatePost(
 				metaDescription: data.metaDescription,
 				ogImage: data.ogImage,
 				...(finalExcerpt !== undefined ? { excerpt: finalExcerpt } : {}),
+				featuredImage: data.featuredImage,
 				...(finalScheduledAt !== undefined
 					? ({ scheduledAt: finalScheduledAt } as any)
 					: {}),
@@ -275,6 +277,7 @@ export async function bulkCreatePosts(
 					metaDescription: postData.metaDescription,
 					ogImage: postData.ogImage,
 					excerpt: finalExcerpt,
+					featuredImage: postData.featuredImage,
 					tags:
 						postData.tags && postData.tags.length > 0
 							? {
