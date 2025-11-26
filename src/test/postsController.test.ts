@@ -754,5 +754,1004 @@ describe('Posts Controller - Deactivated User Filtering (mocked)', () => {
       expect(response.body.post.slug).toBe('my-post');
     });
   });
+
+  describe('POST /api/posts - Post Excerpt Feature', () => {
+    it('should create a post with explicit excerpt', async () => {
+      const postData = {
+        title: 'Post with Excerpt',
+        content: '# Content',
+        excerpt: 'This is a custom excerpt for the post',
+        published: false,
+      };
+
+      (prismaMock.post.findUnique as jest.Mock).mockResolvedValue(null); // No slug collision
+      (prismaMock.post.create as jest.Mock).mockResolvedValue({
+        id: 'post-1',
+        ...postData,
+        slug: 'post-with-excerpt',
+        featured: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        authorId: activeUserId,
+        categoryId: null,
+        metaTitle: null,
+        metaDescription: null,
+        ogImage: null,
+        viewCount: 0,
+        author: { id: activeUserId, username: 'activeuser' },
+        category: null,
+        tags: [],
+      });
+      (prismaMock.postLike.count as jest.Mock).mockResolvedValue(0);
+
+      const response = await request(app)
+        .post('/api/posts')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send(postData)
+        .expect(201);
+
+      expect(response.body.post.excerpt).toBe('This is a custom excerpt for the post');
+      expect(prismaMock.post.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            excerpt: 'This is a custom excerpt for the post',
+          }),
+        })
+      );
+    });
+
+    it('should use metaDescription as excerpt when excerpt is not provided', async () => {
+      const postData = {
+        title: 'Post without Excerpt',
+        content: '# Content',
+        metaDescription: 'This is the meta description',
+        published: false,
+      };
+
+      (prismaMock.post.findUnique as jest.Mock).mockResolvedValue(null);
+      (prismaMock.post.create as jest.Mock).mockResolvedValue({
+        id: 'post-2',
+        ...postData,
+        excerpt: 'This is the meta description', // Should use metaDescription
+        slug: 'post-without-excerpt',
+        featured: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        authorId: activeUserId,
+        categoryId: null,
+        metaTitle: null,
+        ogImage: null,
+        viewCount: 0,
+        author: { id: activeUserId, username: 'activeuser' },
+        category: null,
+        tags: [],
+      });
+      (prismaMock.postLike.count as jest.Mock).mockResolvedValue(0);
+
+      const response = await request(app)
+        .post('/api/posts')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send(postData)
+        .expect(201);
+
+      expect(response.body.post.excerpt).toBe('This is the meta description');
+      expect(prismaMock.post.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            excerpt: 'This is the meta description',
+          }),
+        })
+      );
+    });
+
+    it('should set excerpt to null when neither excerpt nor metaDescription is provided', async () => {
+      const postData = {
+        title: 'Post without Excerpt or Meta',
+        content: '# Content',
+        published: false,
+      };
+
+      (prismaMock.post.findUnique as jest.Mock).mockResolvedValue(null);
+      (prismaMock.post.create as jest.Mock).mockResolvedValue({
+        id: 'post-3',
+        ...postData,
+        excerpt: null,
+        slug: 'post-without-excerpt-or-meta',
+        featured: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        authorId: activeUserId,
+        categoryId: null,
+        metaTitle: null,
+        metaDescription: null,
+        ogImage: null,
+        viewCount: 0,
+        author: { id: activeUserId, username: 'activeuser' },
+        category: null,
+        tags: [],
+      });
+      (prismaMock.postLike.count as jest.Mock).mockResolvedValue(0);
+
+      const response = await request(app)
+        .post('/api/posts')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send(postData)
+        .expect(201);
+
+      expect(response.body.post.excerpt).toBeNull();
+      expect(prismaMock.post.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            excerpt: null,
+          }),
+        })
+      );
+    });
+
+    it('should reject excerpt longer than 500 characters', async () => {
+      const longExcerpt = 'a'.repeat(501);
+      const postData = {
+        title: 'Post with Long Excerpt',
+        content: '# Content',
+        excerpt: longExcerpt,
+        published: false,
+      };
+
+      const response = await request(app)
+        .post('/api/posts')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send(postData)
+        .expect(400);
+
+      expect(response.body).toHaveProperty('error');
+      expect(response.body.error).toBe('ValidationError');
+      response.body.details.some(
+        (detail: any) => detail.msg === "Excerpt must be 500 characters or less"
+      );
+      expect(prismaMock.post.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('PUT /api/posts/:id - Post Excerpt Updates', () => {
+    it('should update post with new excerpt', async () => {
+      const postId = 'post-to-update-excerpt';
+      const existingPost = {
+        id: postId,
+        title: 'Original Title',
+        content: '# Content',
+        slug: 'original-title',
+        published: true,
+        featured: false,
+        createdAt: new Date('2024-01-01'),
+        updatedAt: new Date('2024-01-01'),
+        authorId: activeUserId,
+        categoryId: null,
+        excerpt: 'Old excerpt',
+        metaDescription: 'Old meta description',
+        viewCount: 0,
+      };
+
+      (prismaMock.post.findUnique as jest.Mock).mockResolvedValueOnce(existingPost);
+
+      (prismaMock.$transaction as jest.Mock).mockImplementation(async (callback: any) => {
+        return callback({
+          postTag: {
+            deleteMany: jest.fn().mockResolvedValue({}),
+          },
+          post: {
+            update: jest.fn().mockResolvedValue({
+              ...existingPost,
+              excerpt: 'New excerpt',
+              updatedAt: new Date(),
+              author: { id: activeUserId, username: 'activeuser' },
+              category: null,
+              tags: [],
+            }),
+          },
+        });
+      });
+
+      (prismaMock.postLike.count as jest.Mock).mockResolvedValue(0);
+
+      const response = await request(app)
+        .put(`/api/posts/${postId}`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          title: 'Original Title',
+          content: '# Content',
+          excerpt: 'New excerpt',
+        })
+        .expect(200);
+
+      expect(response.body.post.excerpt).toBe('New excerpt');
+    });
+
+    it('should clear excerpt when set to null', async () => {
+      const postId = 'post-to-clear-excerpt';
+      const existingPost = {
+        id: postId,
+        title: 'Original Title',
+        content: '# Content',
+        slug: 'original-title',
+        published: true,
+        featured: false,
+        createdAt: new Date('2024-01-01'),
+        updatedAt: new Date('2024-01-01'),
+        authorId: activeUserId,
+        categoryId: null,
+        excerpt: 'Existing excerpt',
+        metaDescription: 'Meta description',
+        viewCount: 0,
+      };
+
+      (prismaMock.post.findUnique as jest.Mock).mockResolvedValueOnce(existingPost);
+
+      (prismaMock.$transaction as jest.Mock).mockImplementation(async (callback: any) => {
+        return callback({
+          postTag: {
+            deleteMany: jest.fn().mockResolvedValue({}),
+          },
+          post: {
+            update: jest.fn().mockResolvedValue({
+              ...existingPost,
+              excerpt: null,
+              updatedAt: new Date(),
+              author: { id: activeUserId, username: 'activeuser' },
+              category: null,
+              tags: [],
+            }),
+          },
+        });
+      });
+
+      (prismaMock.postLike.count as jest.Mock).mockResolvedValue(0);
+
+      const response = await request(app)
+        .put(`/api/posts/${postId}`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          title: 'Original Title',
+          content: '# Content',
+          excerpt: null,
+        })
+        .expect(200);
+
+      expect(response.body.post.excerpt).toBeNull();
+    });
+
+    it('should update excerpt to new metaDescription when excerpt matches old metaDescription', async () => {
+      const postId = 'post-with-matching-excerpt';
+      const existingPost = {
+        id: postId,
+        title: 'Original Title',
+        content: '# Content',
+        slug: 'original-title',
+        published: true,
+        featured: false,
+        createdAt: new Date('2024-01-01'),
+        updatedAt: new Date('2024-01-01'),
+        authorId: activeUserId,
+        categoryId: null,
+        excerpt: 'Old meta description', // Matches old metaDescription
+        metaDescription: 'Old meta description',
+        viewCount: 0,
+      };
+
+      (prismaMock.post.findUnique as jest.Mock).mockResolvedValueOnce(existingPost);
+
+      (prismaMock.$transaction as jest.Mock).mockImplementation(async (callback: any) => {
+        return callback({
+          postTag: {
+            deleteMany: jest.fn().mockResolvedValue({}),
+          },
+          post: {
+            update: jest.fn().mockResolvedValue({
+              ...existingPost,
+              excerpt: 'New meta description', // Should update to new metaDescription
+              metaDescription: 'New meta description',
+              updatedAt: new Date(),
+              author: { id: activeUserId, username: 'activeuser' },
+              category: null,
+              tags: [],
+            }),
+          },
+        });
+      });
+
+      (prismaMock.postLike.count as jest.Mock).mockResolvedValue(0);
+
+      const response = await request(app)
+        .put(`/api/posts/${postId}`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          title: 'Original Title',
+          content: '# Content',
+          metaDescription: 'New meta description', // Only updating metaDescription
+        })
+        .expect(200);
+
+      expect(response.body.post.excerpt).toBe('New meta description');
+      expect(response.body.post.metaDescription).toBe('New meta description');
+    });
+
+    it('should preserve custom excerpt when metaDescription is updated', async () => {
+      const postId = 'post-with-custom-excerpt';
+      const existingPost = {
+        id: postId,
+        title: 'Original Title',
+        content: '# Content',
+        slug: 'original-title',
+        published: true,
+        featured: false,
+        createdAt: new Date('2024-01-01'),
+        updatedAt: new Date('2024-01-01'),
+        authorId: activeUserId,
+        categoryId: null,
+        excerpt: 'Custom excerpt text', // Custom excerpt, different from metaDescription
+        metaDescription: 'Old meta description',
+        viewCount: 0,
+      };
+
+      (prismaMock.post.findUnique as jest.Mock).mockResolvedValueOnce(existingPost);
+
+      (prismaMock.$transaction as jest.Mock).mockImplementation(async (callback: any) => {
+        return callback({
+          postTag: {
+            deleteMany: jest.fn().mockResolvedValue({}),
+          },
+          post: {
+            update: jest.fn().mockResolvedValue({
+              ...existingPost,
+              metaDescription: 'New meta description', // Only metaDescription updated
+              // excerpt should remain unchanged
+              updatedAt: new Date(),
+              author: { id: activeUserId, username: 'activeuser' },
+              category: null,
+              tags: [],
+            }),
+          },
+        });
+      });
+
+      (prismaMock.postLike.count as jest.Mock).mockResolvedValue(0);
+
+      const response = await request(app)
+        .put(`/api/posts/${postId}`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          title: 'Original Title',
+          content: '# Content',
+          metaDescription: 'New meta description',
+        })
+        .expect(200);
+
+      expect(response.body.post.excerpt).toBe('Custom excerpt text'); // Should preserve custom excerpt
+      expect(response.body.post.metaDescription).toBe('New meta description');
+    });
+  });
+
+  describe('POST /api/posts/bulk - Post Excerpt in Bulk Creation', () => {
+    it('should create multiple posts with excerpt support', async () => {
+      const postsData = [
+        {
+          title: 'Bulk Post 1',
+          content: '# Content 1',
+          excerpt: 'Custom excerpt for post 1',
+          published: false,
+        },
+        {
+          title: 'Bulk Post 2',
+          content: '# Content 2',
+          metaDescription: 'Meta description for post 2',
+          published: false,
+        },
+        {
+          title: 'Bulk Post 3',
+          content: '# Content 3',
+          published: false,
+        },
+      ];
+
+      const mockPosts = [
+        {
+          id: 'post-1',
+          title: 'Bulk Post 1',
+          content: '# Content 1',
+          slug: 'bulk-post-1',
+          excerpt: 'Custom excerpt for post 1',
+          metaDescription: null,
+          published: false,
+          featured: false,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          authorId: activeUserId,
+          categoryId: null,
+          metaTitle: null,
+          ogImage: null,
+          viewCount: 0,
+          author: { id: activeUserId, username: 'activeuser' },
+          category: null,
+          tags: [],
+        },
+        {
+          id: 'post-2',
+          title: 'Bulk Post 2',
+          content: '# Content 2',
+          slug: 'bulk-post-2',
+          excerpt: 'Meta description for post 2', // Should use metaDescription
+          metaDescription: 'Meta description for post 2',
+          published: false,
+          featured: false,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          authorId: activeUserId,
+          categoryId: null,
+          metaTitle: null,
+          ogImage: null,
+          viewCount: 0,
+          author: { id: activeUserId, username: 'activeuser' },
+          category: null,
+          tags: [],
+        },
+        {
+          id: 'post-3',
+          title: 'Bulk Post 3',
+          content: '# Content 3',
+          slug: 'bulk-post-3',
+          excerpt: null, // No excerpt or metaDescription
+          metaDescription: null,
+          published: false,
+          featured: false,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          authorId: activeUserId,
+          categoryId: null,
+          metaTitle: null,
+          ogImage: null,
+          viewCount: 0,
+          author: { id: activeUserId, username: 'activeuser' },
+          category: null,
+          tags: [],
+        },
+      ];
+
+      // Mock slug checks
+      (prismaMock.post.findMany as jest.Mock).mockResolvedValue([]); // No existing slugs
+
+      (prismaMock.$transaction as jest.Mock).mockImplementation(async (promises: any[]) => {
+        return Promise.all(
+          promises.map((_, index) => Promise.resolve(mockPosts[index]))
+        );
+      });
+
+      const response = await request(app)
+        .post('/api/posts/bulk')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ posts: postsData })
+        .expect(201);
+
+      expect(response.body.posts).toHaveLength(3);
+      expect(response.body.posts[0].excerpt).toBe('Custom excerpt for post 1');
+      expect(response.body.posts[1].excerpt).toBe('Meta description for post 2'); // Should use metaDescription
+      expect(response.body.posts[2].excerpt).toBeNull(); // No excerpt or metaDescription
+    });
+
+    it('should validate excerpt length for each post in bulk creation', async () => {
+      const longExcerpt = 'a'.repeat(501);
+      const postsData = [
+        {
+          title: 'Valid Post',
+          content: '# Content',
+          excerpt: 'Valid excerpt',
+          published: false,
+        },
+        {
+          title: 'Invalid Post',
+          content: '# Content',
+          excerpt: longExcerpt, // Too long
+          published: false,
+        },
+      ];
+
+      const response = await request(app)
+        .post('/api/posts/bulk')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ posts: postsData })
+        .expect(400);
+
+        expect(response.body).toHaveProperty('error');
+        expect(response.body.error).toBe('ValidationError');
+        response.body.details.some(
+          (detail: any) => detail.msg === "Excerpt must be 500 characters or less"
+        );      expect(prismaMock.post.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('POST /api/posts - Featured Image', () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+      invalidateCache.invalidateAll();
+    });
+
+    it('should create post with featured image', async () => {
+      const postData = {
+        title: 'Post with Featured Image',
+        content: '# Test Content',
+        published: false,
+        featuredImage: 'https://example.com/featured-image.jpg',
+      };
+
+      const mockPost = {
+        id: 'post-1',
+        title: postData.title,
+        content: postData.content,
+        slug: 'post-with-featured-image',
+        published: postData.published,
+        featured: false,
+        featuredImage: postData.featuredImage,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        authorId: activeUserId,
+        categoryId: null,
+        metaTitle: null,
+        metaDescription: null,
+        ogImage: null,
+        viewCount: 0,
+        author: { id: activeUserId, username: 'activeuser' },
+        category: null,
+        tags: [],
+      };
+
+      (prismaMock.post.findUnique as jest.Mock).mockResolvedValue(null); // No existing post
+      (prismaMock.post.create as jest.Mock).mockResolvedValue(mockPost);
+      (prismaMock.postLike.count as jest.Mock).mockResolvedValue(0);
+
+      const response = await request(app)
+        .post('/api/posts')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send(postData)
+        .expect(201);
+
+      expect(response.body).toHaveProperty('message', 'Post created successfully');
+      expect(response.body.post.featuredImage).toBe(postData.featuredImage);
+      expect(prismaMock.post.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            featuredImage: postData.featuredImage,
+          }),
+        })
+      );
+    });
+
+    it('should create post without featured image (should be null)', async () => {
+      const postData = {
+        title: 'Post without Featured Image',
+        content: '# Test Content',
+        published: false,
+      };
+
+      const mockPost = {
+        id: 'post-2',
+        title: postData.title,
+        content: postData.content,
+        slug: 'post-without-featured-image',
+        published: postData.published,
+        featured: false,
+        featuredImage: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        authorId: activeUserId,
+        categoryId: null,
+        metaTitle: null,
+        metaDescription: null,
+        ogImage: null,
+        viewCount: 0,
+        author: { id: activeUserId, username: 'activeuser' },
+        category: null,
+        tags: [],
+      };
+
+      (prismaMock.post.findUnique as jest.Mock).mockResolvedValue(null);
+      (prismaMock.post.create as jest.Mock).mockResolvedValue(mockPost);
+      (prismaMock.postLike.count as jest.Mock).mockResolvedValue(0);
+
+      const response = await request(app)
+        .post('/api/posts')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send(postData)
+        .expect(201);
+
+      expect(response.body.post.featuredImage).toBeNull();
+    });
+
+    it('should reject post with invalid featured image URL', async () => {
+      const postData = {
+        title: 'Post with Invalid Featured Image',
+        content: '# Test Content',
+        published: false,
+        featuredImage: 'not-a-valid-url',
+      };
+
+      const response = await request(app)
+        .post('/api/posts')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send(postData)
+        .expect(400);
+
+      expect(response.body).toHaveProperty('error', 'ValidationError');
+    });
+
+    it('should accept null for featured image', async () => {
+      const postData = {
+        title: 'Post with Null Featured Image',
+        content: '# Test Content',
+        published: false,
+        featuredImage: null,
+      };
+
+      const mockPost = {
+        id: 'post-3',
+        title: postData.title,
+        content: postData.content,
+        slug: 'post-with-null-featured-image',
+        published: postData.published,
+        featured: false,
+        featuredImage: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        authorId: activeUserId,
+        categoryId: null,
+        metaTitle: null,
+        metaDescription: null,
+        ogImage: null,
+        viewCount: 0,
+        author: { id: activeUserId, username: 'activeuser' },
+        category: null,
+        tags: [],
+      };
+
+      (prismaMock.post.findUnique as jest.Mock).mockResolvedValue(null);
+      (prismaMock.post.create as jest.Mock).mockResolvedValue(mockPost);
+      (prismaMock.postLike.count as jest.Mock).mockResolvedValue(0);
+
+      const response = await request(app)
+        .post('/api/posts')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send(postData)
+        .expect(201);
+
+      expect(response.body.post.featuredImage).toBeNull();
+    });
+  });
+
+  describe('PUT /api/posts/:id - Featured Image', () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+      invalidateCache.invalidateAll();
+    });
+
+    it('should update post to add featured image', async () => {
+      const postId = 'post-to-update';
+      const existingPost = {
+        id: postId,
+        title: 'Post without Featured Image',
+        content: '# Original Content',
+        slug: 'post-without-featured-image-update',
+        published: false,
+        featured: false,
+        featuredImage: null,
+        createdAt: new Date('2024-01-01'),
+        updatedAt: new Date('2024-01-01'),
+        authorId: activeUserId,
+        categoryId: null,
+        metaTitle: null,
+        metaDescription: null,
+        ogImage: null,
+        viewCount: 0,
+      };
+
+      const updateData = {
+        title: 'Post without Featured Image',
+        content: '# Original Content',
+        featuredImage: 'https://example.com/new-featured-image.jpg',
+      };
+
+      (prismaMock.post.findUnique as jest.Mock).mockResolvedValueOnce(existingPost);
+
+      (prismaMock.$transaction as jest.Mock).mockImplementation(async (callback: any) => {
+        return callback({
+          postTag: {
+            deleteMany: jest.fn().mockResolvedValue({}),
+          },
+          post: {
+            update: jest.fn().mockResolvedValue({
+              ...existingPost,
+              featuredImage: updateData.featuredImage,
+              updatedAt: new Date(),
+              author: { id: activeUserId, username: 'activeuser' },
+              category: null,
+              tags: [],
+            }),
+          },
+        });
+      });
+
+      (prismaMock.postLike.count as jest.Mock).mockResolvedValue(0);
+
+      const response = await request(app)
+        .put(`/api/posts/${postId}`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send(updateData)
+        .expect(200);
+
+      expect(response.body.post.featuredImage).toBe(updateData.featuredImage);
+    });
+
+    it('should update post to change featured image URL', async () => {
+      const postId = 'post-to-update';
+      const existingPost = {
+        id: postId,
+        title: 'Post with Featured Image',
+        content: '# Original Content',
+        slug: 'post-with-featured-image-update',
+        published: false,
+        featured: false,
+        featuredImage: 'https://example.com/old-featured-image.jpg',
+        createdAt: new Date('2024-01-01'),
+        updatedAt: new Date('2024-01-01'),
+        authorId: activeUserId,
+        categoryId: null,
+        metaTitle: null,
+        metaDescription: null,
+        ogImage: null,
+        viewCount: 0,
+      };
+
+      const updateData = {
+        title: 'Post with Featured Image',
+        content: '# Original Content',
+        featuredImage: 'https://example.com/new-featured-image.jpg',
+      };
+
+      (prismaMock.post.findUnique as jest.Mock).mockResolvedValueOnce(existingPost);
+
+      (prismaMock.$transaction as jest.Mock).mockImplementation(async (callback: any) => {
+        return callback({
+          postTag: {
+            deleteMany: jest.fn().mockResolvedValue({}),
+          },
+          post: {
+            update: jest.fn().mockResolvedValue({
+              ...existingPost,
+              featuredImage: updateData.featuredImage,
+              updatedAt: new Date(),
+              author: { id: activeUserId, username: 'activeuser' },
+              category: null,
+              tags: [],
+            }),
+          },
+        });
+      });
+
+      (prismaMock.postLike.count as jest.Mock).mockResolvedValue(0);
+
+      const response = await request(app)
+        .put(`/api/posts/${postId}`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send(updateData)
+        .expect(200);
+
+      expect(response.body.post.featuredImage).toBe(updateData.featuredImage);
+    });
+
+    it('should update post to remove featured image (set to null)', async () => {
+      const postId = 'post-to-update';
+      const existingPost = {
+        id: postId,
+        title: 'Post with Featured Image to Remove',
+        content: '# Original Content',
+        slug: 'post-with-featured-image-remove',
+        published: false,
+        featured: false,
+        featuredImage: 'https://example.com/featured-image.jpg',
+        createdAt: new Date('2024-01-01'),
+        updatedAt: new Date('2024-01-01'),
+        authorId: activeUserId,
+        categoryId: null,
+        metaTitle: null,
+        metaDescription: null,
+        ogImage: null,
+        viewCount: 0,
+      };
+
+      const updateData = {
+        title: 'Post with Featured Image to Remove',
+        content: '# Original Content',
+        featuredImage: null,
+      };
+
+      (prismaMock.post.findUnique as jest.Mock).mockResolvedValueOnce(existingPost);
+
+      (prismaMock.$transaction as jest.Mock).mockImplementation(async (callback: any) => {
+        return callback({
+          postTag: {
+            deleteMany: jest.fn().mockResolvedValue({}),
+          },
+          post: {
+            update: jest.fn().mockResolvedValue({
+              ...existingPost,
+              featuredImage: null,
+              updatedAt: new Date(),
+              author: { id: activeUserId, username: 'activeuser' },
+              category: null,
+              tags: [],
+            }),
+          },
+        });
+      });
+
+      (prismaMock.postLike.count as jest.Mock).mockResolvedValue(0);
+
+      const response = await request(app)
+        .put(`/api/posts/${postId}`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send(updateData)
+        .expect(200);
+
+      expect(response.body.post.featuredImage).toBeNull();
+    });
+
+    it('should reject update with invalid featured image URL', async () => {
+      const postId = 'post-to-update';
+      const existingPost = {
+        id: postId,
+        title: 'Test Post',
+        content: '# Test Content',
+        slug: 'test-post-invalid-featured',
+        published: false,
+        featured: false,
+        featuredImage: null,
+        createdAt: new Date('2024-01-01'),
+        updatedAt: new Date('2024-01-01'),
+        authorId: activeUserId,
+        categoryId: null,
+        metaTitle: null,
+        metaDescription: null,
+        ogImage: null,
+        viewCount: 0,
+      };
+
+      (prismaMock.post.findUnique as jest.Mock).mockResolvedValueOnce(existingPost);
+
+      const updateData = {
+        title: 'Test Post',
+        content: '# Test Content',
+        featuredImage: 'not-a-valid-url',
+      };
+
+      const response = await request(app)
+        .put(`/api/posts/${postId}`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .send(updateData)
+        .expect(400);
+
+      expect(response.body).toHaveProperty('error', 'ValidationError');
+    });
+  });
+
+  describe('GET /api/posts/:slug - Featured Image', () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+      invalidateCache.invalidateAll();
+    });
+
+    it('should return post with featured image', async () => {
+      const activePost = {
+        id: 'post-with-featured',
+        title: 'Post with Featured Image',
+        content: '# Test Content',
+        slug: 'post-with-featured-image-get',
+        published: true,
+        featured: false,
+        featuredImage: 'https://example.com/featured-image.jpg',
+        createdAt: new Date('2024-01-01'),
+        updatedAt: new Date('2024-01-01'),
+        authorId: activeUserId,
+        categoryId: null,
+        metaTitle: null,
+        metaDescription: null,
+        ogImage: null,
+        viewCount: 0,
+        author: { id: activeUserId, username: 'activeuser', deletedAt: null },
+        category: null,
+        tags: [],
+      };
+
+      (prismaMock.post.findUnique as jest.Mock).mockResolvedValue(activePost);
+      (prismaMock.postLike.count as jest.Mock).mockResolvedValue(0);
+      (prismaMock.post.update as jest.Mock).mockResolvedValue({ ...activePost, viewCount: 1 });
+
+      const response = await request(app)
+        .get('/api/posts/post-with-featured-image-get')
+        .expect(200);
+
+      expect(response.body.post.featuredImage).toBe('https://example.com/featured-image.jpg');
+    });
+
+    it('should return null for featured image when not set', async () => {
+      const activePost = {
+        id: 'post-without-featured',
+        title: 'Post without Featured Image',
+        content: '# Test Content',
+        slug: 'post-without-featured-image-get',
+        published: true,
+        featured: false,
+        featuredImage: null,
+        createdAt: new Date('2024-01-01'),
+        updatedAt: new Date('2024-01-01'),
+        authorId: activeUserId,
+        categoryId: null,
+        metaTitle: null,
+        metaDescription: null,
+        ogImage: null,
+        viewCount: 0,
+        author: { id: activeUserId, username: 'activeuser', deletedAt: null },
+        category: null,
+        tags: [],
+      };
+
+      (prismaMock.post.findUnique as jest.Mock).mockResolvedValue(activePost);
+      (prismaMock.postLike.count as jest.Mock).mockResolvedValue(0);
+      (prismaMock.post.update as jest.Mock).mockResolvedValue({ ...activePost, viewCount: 1 });
+
+      const response = await request(app)
+        .get('/api/posts/post-without-featured-image-get')
+        .expect(200);
+
+      expect(response.body.post.featuredImage).toBeNull();
+    });
+  });
+
+  describe('GET /api/posts - Featured Image in List', () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+      invalidateCache.invalidateAll();
+    });
+
+    it('should return featured image in posts list', async () => {
+      const post = {
+        id: 'post-with-featured-list',
+        title: 'Post with Featured Image in List',
+        content: '# Test Content',
+        slug: 'post-with-featured-image-list',
+        published: true,
+        featured: false,
+        featuredImage: 'https://example.com/featured-image-list.jpg',
+        createdAt: new Date('2024-01-01'),
+        updatedAt: new Date('2024-01-01'),
+        authorId: activeUserId,
+        categoryId: null,
+        metaTitle: null,
+        metaDescription: null,
+        ogImage: null,
+        viewCount: 0,
+        author: { id: activeUserId, username: 'activeuser' },
+        category: null,
+        tags: [],
+      };
+
+      (prismaMock.post.findMany as jest.Mock).mockResolvedValue([post]);
+      (prismaMock.postLike.count as jest.Mock).mockResolvedValue(0);
+      (prismaMock.post.count as jest.Mock).mockResolvedValue(1);
+
+      const response = await request(app)
+        .get('/api/posts')
+        .expect(200);
+
+      expect(response.body.posts).toHaveLength(1);
+      expect(response.body.posts[0].featuredImage).toBe('https://example.com/featured-image-list.jpg');
+    });
+  });
+
 });
 

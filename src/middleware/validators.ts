@@ -86,11 +86,22 @@ export const validatePost = [
     .customSanitizer(sanitizeText)
     .isLength({ max: 160 })
     .withMessage("Meta description must be 160 characters or less"),
+  body("excerpt")
+    .optional({ nullable: true })
+    .trim()
+    .customSanitizer(sanitizeText)
+    .isLength({ max: 500 })
+    .withMessage("Excerpt must be 500 characters or less"),
   body("ogImage")
     .optional({ nullable: true })
     .trim()
     .isURL()
     .withMessage("OG image must be a valid URL"),
+  body("featuredImage")
+    .optional({ nullable: true })
+    .trim()
+    .isURL()
+    .withMessage("Featured image must be a valid URL"),
   body("tags")
     .optional()
     .isArray()
@@ -160,8 +171,21 @@ export const validateBulkPosts = [
         if (post.metaDescription !== undefined && post.metaDescription !== null && (typeof post.metaDescription !== "string" || post.metaDescription.trim().length > 160)) {
           throw new Error(`Post at index ${i}: metaDescription must be 160 characters or less`);
         }
+        if (post.excerpt !== undefined && post.excerpt !== null && (typeof post.excerpt !== "string" || post.excerpt.trim().length > 500)) {
+          throw new Error(`Post at index ${i}: excerpt must be 500 characters or less`);
+        }
         if (post.ogImage !== undefined && post.ogImage !== null && typeof post.ogImage !== "string") {
           throw new Error(`Post at index ${i}: ogImage must be a string or null`);
+        }
+        if (post.featuredImage !== undefined && post.featuredImage !== null && typeof post.featuredImage !== "string") {
+          throw new Error(`Post at index ${i}: featuredImage must be a string or null`);
+        }
+        if (post.featuredImage !== undefined && post.featuredImage !== null) {
+          try {
+            new URL(post.featuredImage);
+          } catch {
+            throw new Error(`Post at index ${i}: featuredImage must be a valid URL`);
+          }
         }
         if (post.tags !== undefined) {
           if (!Array.isArray(post.tags)) {

@@ -37,6 +37,7 @@ describe('Bulk Posts API', () => {
     metaDescription: overrides.metaDescription || null,
     metaTitle: overrides.metaTitle || null,
     ogImage: overrides.ogImage || null,
+    featuredImage: overrides.featuredImage !== undefined ? overrides.featuredImage : null,
     viewCount: 0,
     author: {
       id: userId,
@@ -443,6 +444,80 @@ describe('Bulk Posts API', () => {
       expect(res.body.posts[0]).toHaveProperty('readingTime');
       expect(res.body.posts[0]).toHaveProperty('tags');
       expect(Array.isArray(res.body.posts[0].tags)).toBe(true);
+    });
+  });
+
+  describe('POST /api/posts/bulk - Featured Image', () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    it('should create bulk posts with and without featured images', async () => {
+      const postsData = [
+        {
+          title: 'Bulk Post 1 with Featured Image',
+          content: '# Content 1',
+          published: false,
+          featuredImage: 'https://example.com/bulk-featured-1.jpg',
+        },
+        {
+          title: 'Bulk Post 2 without Featured Image',
+          content: '# Content 2',
+          published: false,
+        },
+        {
+          title: 'Bulk Post 3 with Featured Image',
+          content: '# Content 3',
+          published: false,
+          featuredImage: 'https://example.com/bulk-featured-3.jpg',
+        },
+      ];
+
+      const mockPosts = postsData.map((post, index) =>
+        createMockPost({
+          title: post.title,
+          content: post.content,
+          slug: `bulk-post-${index + 1}`,
+          published: post.published,
+          featuredImage: post.featuredImage,
+        })
+      );
+
+      (prismaMock.post.findMany as jest.Mock).mockResolvedValue([]); // No existing posts
+      
+      (prismaMock.$transaction as jest.Mock).mockImplementation(async (promises: any[]) => {
+        return Promise.all(promises.map((_, index) => Promise.resolve(mockPosts[index])));
+      });
+
+      const res = await request(app)
+        .post('/api/posts/bulk')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ posts: postsData })
+        .expect(201);
+
+      expect(res.body.posts).toHaveLength(3);
+      expect(res.body.posts[0].featuredImage).toBe(postsData[0].featuredImage);
+      expect(res.body.posts[1].featuredImage).toBeNull();
+      expect(res.body.posts[2].featuredImage).toBe(postsData[2].featuredImage);
+    });
+
+    it('should reject bulk posts with invalid featured image URL', async () => {
+      const postsData = [
+        {
+          title: 'Bulk Post with Invalid Featured Image',
+          content: '# Content',
+          published: false,
+          featuredImage: 'not-a-valid-url',
+        },
+      ];
+
+      const res = await request(app)
+        .post('/api/posts/bulk')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({ posts: postsData })
+        .expect(400);
+
+      expect(res.body).toHaveProperty('error', 'ValidationError');
     });
   });
 });

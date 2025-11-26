@@ -29,6 +29,8 @@ model User {
   posts               Post[]
   refreshTokens       RefreshToken[]
   savedPosts          SavedPost[]
+  commenterStatsAsAuthor    UserCommenterStats[] @relation("PostAuthorStats")
+  commenterStatsAsCommenter UserCommenterStats[] @relation("CommenterStats")
 
   @@map("users")
 }
@@ -46,6 +48,8 @@ model Post {
   metaDescription String?
   metaTitle       String?
   ogImage         String?
+  excerpt         String?
+  featuredImage   String?
   viewCount       Int          @default(0)
   featured        Boolean      @default(false)
   allowComments   Boolean      @default(true)
@@ -218,4 +222,21 @@ enum ReportStatus {
   PENDING
   REVIEWED
   REJECTED
+}
+
+model UserCommenterStats {
+  id            String   @id @default(cuid())
+  postAuthorId  String
+  commenterId   String
+  commentCount  Int      @default(0)
+  lastCommentAt DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  postAuthor    User     @relation("PostAuthorStats", fields: [postAuthorId], references: [id], onDelete: Cascade)
+  commenter     User     @relation("CommenterStats", fields: [commenterId], references: [id], onDelete: Cascade)
+
+  @@unique([postAuthorId, commenterId])
+  @@index([postAuthorId])
+  @@index([commenterId])
+  @@map("user_commenter_stats")
 }

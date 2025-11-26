@@ -6,6 +6,7 @@ import { invalidateCache } from '../middleware/cache';
 import { NotFoundError, ForbiddenError, UnauthorizedError } from '../utils/errors';
 import { ModerationStatus } from '@prisma/client';
 import * as commentReportsService from '../services/commentReportsService';
+import { updateCommenterStats, decrementCommenterStats, checkMultipleTopCommenters } from '../services/commenterStatsService';
 
 async function getThreadDepth(commentId: string, depth: number = 0): Promise<number> {
   if (depth >= 5) {
@@ -24,7 +25,26 @@ async function getThreadDepth(commentId: string, depth: number = 0): Promise<num
   return getThreadDepth(comment.parentId, depth + 1);
 }
 
-async function getNestedReplies(postId: string, parentId: string, currentDepth: number = 0, userId?: string, isPostAuthor?: boolean): Promise<any[]> {
+async function softDeleteReplies(parentId: string): Promise<void> {
+  const replies = await prisma.comment.findMany({
+    where: {
+      parentId: parentId,
+      deletedAt: null,
+    },
+    select: { id: true },
+  });
+
+  for (const reply of replies) {
+    await prisma.comment.update({
+      where: { id: reply.id },
+      data: { deletedAt: new Date() },
+    });
+
+    await softDeleteReplies(reply.id);
+  }
+}
+
+async function getNestedReplies(postId: string, parentId: string, currentDepth: number = 0, postAuthorId: string, userId?: string, isPostAuthor?: boolean): Promise<any[]> {
   if (currentDepth >= 5) {
     return [];
   }
@@ -32,6 +52,7 @@ async function getNestedReplies(postId: string, parentId: string, currentDepth: 
   const whereClause: any = {
     parentId: parentId,
     postId: postId,
+    deletedAt: null,
     user: {
       deletedAt: null, // Filter out comments from deactivated users
     },
@@ -55,6 +76,9 @@ async function getNestedReplies(postId: string, parentId: string, currentDepth: 
     orderBy: { createdAt: 'asc' },
   });
 
+  const commenterIds = replies.map((r: any) => r.userId);
+  const topCommenterMap = await checkMultipleTopCommenters(commenterIds, postAuthorId);
+
   const repliesWithNested = await Promise.all(
     replies.map(async (reply: any) => {
       const likeCount = await prisma.commentLike.count({
@@ -71,7 +95,9 @@ async function getNestedReplies(postId: string, parentId: string, currentDepth: 
         updatedAt: reply.updatedAt,
         user: reply.user,
         likeCount,
-        replies: await getNestedReplies(postId, reply.id, currentDepth + 1, userId, isPostAuthor),
+        replies: await getNestedReplies(postId, reply.id, currentDepth + 1, postAuthorId, userId, isPostAuthor),
+        isTopCommenter: topCommenterMap.get(reply.userId) || false,
+
       };
     })
   );
@@ -104,6 +130,7 @@ export const getCommentsForPost = asyncHandler(async (req: AuthRequest, res: Res
   const whereClause: any = {
     postId,
     parentId: null,
+    deletedAt: null, // Filter out soft-deleted comments
     user: {
       deletedAt: null, // Filter out comments from deactivated users
     },
@@ -127,6 +154,9 @@ export const getCommentsForPost = asyncHandler(async (req: AuthRequest, res: Res
     orderBy: { createdAt: 'asc' },
   });
 
+  const commenterIds = comments.map((c: any) => c.userId);
+  const topCommenterMap = await checkMultipleTopCommenters(commenterIds, post.authorId);
+
   const commentsWithReplies = await Promise.all(
     comments.map(async (comment: any) => {
       const likeCount = await prisma.commentLike.count({
@@ -143,7 +173,8 @@ export const getCommentsForPost = asyncHandler(async (req: AuthRequest, res: Res
         updatedAt: comment.updatedAt,
         user: comment.user,
         likeCount,
-        replies: await getNestedReplies(postId, comment.id, 0, req.user?.id, isPostAuthor),
+        replies: await getNestedReplies(postId, comment.id, 0, post.authorId, req.user?.id, isPostAuthor),
+        isTopCommenter: topCommenterMap.get(comment.userId) || false,
       };
     })
   );
@@ -194,6 +225,8 @@ export const createComment = asyncHandler(async (req: AuthRequest, res: Response
       },
     },
   });
+
+  await updateCommenterStats(req.user.id, post.authorId);
 
   invalidateCache.invalidatePostCache(post.slug);
 
@@ -256,6 +289,9 @@ export const replyToComment = asyncHandler(async (req: AuthRequest, res: Respons
       },
     },
   });
+
+
+  await updateCommenterStats(req.user.id, post.authorId);
 
   invalidateCache.invalidatePostCache(post.slug);
 
@@ -464,8 +500,11 @@ export const deleteComment = asyncHandler(async (req: AuthRequest, res: Response
     throw new NotFoundError('Post not found');
   }
 
-  const comment = await prisma.comment.findUnique({
-    where: { id: commentId },
+  const comment = await prisma.comment.findFirst({
+    where: {
+      id: commentId,
+      deletedAt: null,
+    },
   });
 
   if (!comment || comment.postId !== postId) {
@@ -476,9 +515,16 @@ export const deleteComment = asyncHandler(async (req: AuthRequest, res: Response
     throw new ForbiddenError('You can only delete your own comments');
   }
 
-  await prisma.comment.delete({
+  await decrementCommenterStats(comment.userId, post.authorId);
+
+  await prisma.comment.update({
     where: { id: commentId },
+    data: {
+      deletedAt: new Date(),
+    },
   });
+
+  await softDeleteReplies(commentId);
 
   invalidateCache.invalidatePostCache(post.slug);
 
@@ -499,6 +545,7 @@ export const getRecentComments = asyncHandler(async (req: AuthRequest, res: Resp
   const comments = await prisma.comment.findMany({
     where: {
       parentId: null, // Only top-level comments
+      deletedAt: null,
       user: {
         deletedAt: null, // Filter out comments from deactivated users
       },
@@ -518,6 +565,7 @@ export const getRecentComments = asyncHandler(async (req: AuthRequest, res: Resp
           id: true,
           title: true,
           slug: true,
+          authorId: true,
         },
       },
     },
@@ -526,6 +574,23 @@ export const getRecentComments = asyncHandler(async (req: AuthRequest, res: Resp
     },
     skip,
     take: limit,
+  });
+
+  const postAuthorMap = new Map<string, string>();
+  comments.forEach((comment: any) => {
+    postAuthorMap.set(comment.userId, comment.post.authorId);
+  });
+
+  const topCommenterChecks = await Promise.all(
+    Array.from(postAuthorMap.entries()).map(async ([commenterId, postAuthorId]) => {
+      const commenterMap = await checkMultipleTopCommenters([commenterId], postAuthorId);
+      return { commenterId, isTopCommenter: commenterMap.get(commenterId) || false };
+    })
+  );
+
+  const topCommenterMap = new Map<string, boolean>();
+  topCommenterChecks.forEach(({ commenterId, isTopCommenter }) => {
+    topCommenterMap.set(commenterId, isTopCommenter);
   });
 
   // Get like counts for each comment
@@ -545,6 +610,7 @@ export const getRecentComments = asyncHandler(async (req: AuthRequest, res: Resp
         user: comment.user,
         post: comment.post,
         likeCount,
+        isTopCommenter: topCommenterMap.get(comment.userId) || false,
       };
     })
   );
@@ -553,6 +619,7 @@ export const getRecentComments = asyncHandler(async (req: AuthRequest, res: Resp
   const total = await prisma.comment.count({
     where: {
       parentId: null,
+      deletedAt: null,
       user: {
         deletedAt: null, // Filter out comments from deactivated users
       },
