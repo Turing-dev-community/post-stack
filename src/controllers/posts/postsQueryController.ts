@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { AuthRequest } from '../../utils/auth';
 import * as postsService from '../../services/posts';
+import { checkAuth } from '../../utils/authDecorator';
 
 /**
  * Get all published posts with pagination, filtering, and sorting
@@ -79,11 +80,7 @@ export async function getPopularPosts(req: AuthRequest, res: Response): Promise<
  * Get all posts for authenticated user (including unpublished)
  */
 export async function getMyPosts(req: AuthRequest, res: Response): Promise<Response> {
-  if (!req.user) {
-    return res.status(401).json({
-      error: 'Authentication required',
-    });
-  }
+  if (!checkAuth(req, res)) return res as Response;
 
   const page = parseInt(req.query.page as string) || 1;
   const limit = parseInt(req.query.limit as string) || 10;
@@ -98,11 +95,7 @@ export async function getMyPosts(req: AuthRequest, res: Response): Promise<Respo
  * Get saved posts for authenticated user
  */
 export async function getSavedPosts(req: AuthRequest, res: Response): Promise<Response> {
-  if (!req.user) {
-    return res.status(401).json({
-      error: 'Authentication required',
-    });
-  }
+  if (!checkAuth(req, res)) return res as Response;
 
   const page = parseInt(req.query.page as string) || 1;
   const limit = parseInt(req.query.limit as string) || 10;

@@ -2,11 +2,10 @@ import { Response } from 'express';
 import { asyncHandler } from '../middleware/validation';
 import { AuthRequest } from '../utils/auth';
 import { prisma } from '../lib/prisma';
+import { checkAuth } from '../utils/authDecorator';
 
 export const getProfile = asyncHandler(async (req: AuthRequest, res: Response) => {
-  if (!req.user) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
+  if (!checkAuth(req, res)) return;
 
   const user = await prisma.user.findUnique({
     where: { id: req.user.id },
@@ -28,9 +27,7 @@ export const getProfile = asyncHandler(async (req: AuthRequest, res: Response) =
 });
 
 export const updateProfile = asyncHandler(async (req: AuthRequest, res: Response) => {
-  if (!req.user) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
+  if (!checkAuth(req, res)) return;
 
   const { profilePicture, about } = req.body;
   const updateData: { profilePicture?: string | null; about?: string | null } = {};

@@ -7,6 +7,7 @@ import { NotFoundError, ForbiddenError, UnauthorizedError } from '../utils/error
 import { ModerationStatus } from '@prisma/client';
 import * as commentReportsService from '../services/commentReportsService';
 import { updateCommenterStats, decrementCommenterStats, checkMultipleTopCommenters } from '../services/commenterStatsService';
+import { checkAuth } from '../utils/authDecorator';
 
 async function getThreadDepth(commentId: string, depth: number = 0): Promise<number> {
   if (depth >= 5) {
@@ -197,11 +198,7 @@ export const getCommentsForPost = asyncHandler(async (req: AuthRequest, res: Res
 });
 
 export const createComment = asyncHandler(async (req: AuthRequest, res: Response) => {
-  if (!req.user) {
-    return res.status(401).json({
-      error: 'Authentication required',
-    });
-  }
+  if (!checkAuth(req, res)) return;
 
   const { postId } = req.params;
   const { content } = req.body;
@@ -249,11 +246,7 @@ export const createComment = asyncHandler(async (req: AuthRequest, res: Response
 });
 
 export const replyToComment = asyncHandler(async (req: AuthRequest, res: Response) => {
-  if (!req.user) {
-    return res.status(401).json({
-      error: 'Authentication required',
-    });
-  }
+  if (!checkAuth(req, res)) return;
 
   const { postId, commentId } = req.params;
   const { content } = req.body;
@@ -314,11 +307,7 @@ export const replyToComment = asyncHandler(async (req: AuthRequest, res: Respons
 });
 
 export const likeComment = asyncHandler(async (req: AuthRequest, res: Response) => {
-  if (!req.user) {
-    return res.status(401).json({
-      error: 'Authentication required',
-    });
-  }
+  if (!checkAuth(req, res)) return;
 
   const { postId, commentId } = req.params;
 
@@ -377,11 +366,7 @@ export const likeComment = asyncHandler(async (req: AuthRequest, res: Response) 
 });
 
 export const unlikeComment = asyncHandler(async (req: AuthRequest, res: Response) => {
-  if (!req.user) {
-    return res.status(401).json({
-      error: 'Authentication required',
-    });
-  }
+  if (!checkAuth(req, res)) return;
 
   const { postId, commentId } = req.params;
 
@@ -442,9 +427,7 @@ export const unlikeComment = asyncHandler(async (req: AuthRequest, res: Response
 });
 
 export const updateComment = asyncHandler(async (req: AuthRequest, res: Response) => {
-  if (!req.user) {
-    throw new UnauthorizedError('Authentication required');
-  }
+  if (!checkAuth(req, res)) return;
 
   const { postId, commentId } = req.params;
   const { content } = req.body;
@@ -498,9 +481,7 @@ export const updateComment = asyncHandler(async (req: AuthRequest, res: Response
 });
 
 export const deleteComment = asyncHandler(async (req: AuthRequest, res: Response) => {
-  if (!req.user) {
-    throw new UnauthorizedError('Authentication required');
-  }
+  if (!checkAuth(req, res)) return;
 
   const { postId, commentId } = req.params;
 
