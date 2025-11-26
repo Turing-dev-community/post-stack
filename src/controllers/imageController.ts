@@ -1,9 +1,14 @@
 import { Response, Request } from "express";
 import path from "path";
 import fs from "fs";
+import sizeOf from "image-size";
 import { AuthRequest } from "../utils/auth";
 
 const uploadsDir = path.join(process.cwd(), "uploads");
+
+// Maximum allowed image dimensions (in pixels)
+const MAX_IMAGE_WIDTH = 4000;
+const MAX_IMAGE_HEIGHT = 4000;
 
 // Ensure uploads directory exists
 if (!fs.existsSync(uploadsDir)) {
@@ -18,6 +23,44 @@ export const upload = async (
 		res.status(400).json({
 			error: "No file uploaded",
 			message: 'Please provide an image file with the field name "image"',
+		});
+		return;
+	}
+
+	const filePath = path.join(uploadsDir, req.file.filename);
+
+	// Validate image dimensions
+	try {
+		const dimensions = sizeOf(filePath);
+		const width = dimensions.width || 0;
+		const height = dimensions.height || 0;
+
+		if (
+			width === 0 ||
+			height === 0 ||
+			width > MAX_IMAGE_WIDTH ||
+			height > MAX_IMAGE_HEIGHT
+		) {
+			// Remove the uploaded file if it does not meet requirements
+			if (fs.existsSync(filePath)) {
+				fs.unlinkSync(filePath);
+			}
+
+			res.status(400).json({
+				error: "Image dimensions too large",
+				message: `Image dimensions must be at most ${MAX_IMAGE_WIDTH}x${MAX_IMAGE_HEIGHT} pixels`,
+			});
+			return;
+		}
+	} catch (_error) {
+		// If we fail to read dimensions, treat as invalid image
+		if (fs.existsSync(filePath)) {
+			fs.unlinkSync(filePath);
+		}
+
+		res.status(400).json({
+			error: "Invalid image file",
+			message: "Unable to read image dimensions. Please upload a valid image file.",
 		});
 		return;
 	}

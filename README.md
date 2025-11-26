@@ -236,6 +236,7 @@ In-memory caching is enabled for GET endpoints:
 Image uploads are limited to:
 - **Max file size**: 5MB
 - **Allowed formats**: JPEG, PNG, GIF, WebP
+- **Max resolution**: 4000x4000 pixels (width and height)
 - **Storage**: Local `uploads/` directory
 - **Access**: Via `/api/images/:filename`
 

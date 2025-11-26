@@ -18,19 +18,23 @@ import globalRateLimit from './middleware/rateLimit';
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Security & CORS
 app.use(helmet());
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production' 
-    ? process.env.FRONTEND_URL 
+  origin: process.env.NODE_ENV === 'production'
+    ? process.env.FRONTEND_URL
     : ['http://localhost:3000', 'http://localhost:3001'],
   credentials: true,
 }));
 
+// Rate Limiting
 app.use(globalRateLimit);
 
+// Body Parsing
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
+// Health Check Route
 app.get('/health', (req, res) => {
   res.json({
     status: 'OK',
@@ -39,6 +43,7 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/posts', postRoutes);
@@ -50,8 +55,10 @@ app.use('/api/images', imageRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/', sitemapRoutes);
 
+// Protected Example
 app.use('/api/protected', authenticateToken);
 
+// 404 Handler
 app.use('*', (req, res) => {
   res.status(404).json({
     error: 'Route not found',
@@ -59,14 +66,17 @@ app.use('*', (req, res) => {
   });
 });
 
+// Global Error Handler
 app.use(errorHandler);
 
-if(process.env.NODE_ENV !== 'test') {
-  app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🔗 Health check: http://localhost:${PORT}/health`);
-});
-}
-
+// ⭐ EXPORT FIRST (so tests can import app)
 export default app;
+
+// ⭐ SERVER STARTS ONLY IN NON-TEST ENVIRONMENT
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+    console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`🔗 Health check: http://localhost:${PORT}/health`);
+  });
+}
