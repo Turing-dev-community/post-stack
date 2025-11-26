@@ -260,4 +260,65 @@ describe('Sitemap Routes', () => {
       expect(res.body.error).toBe('Failed to generate sitemap');
     });
   });
+
+  describe('GET /feed.xml', () => {
+    it('should return a valid RSS feed', async () => {
+      (prismaMock.post.findMany as jest.Mock).mockResolvedValue([]);
+
+      const res = await request(app).get('/feed.xml').expect(200);
+
+      expect(res.headers['content-type']).toContain('application/rss+xml');
+      expect(res.text).toContain('<?xml version="1.0" encoding="UTF-8"?>');
+      expect(res.text).toContain('<rss version="2.0">');
+      expect(res.text).toContain('<channel>');
+    });
+
+    it('should include published posts as RSS items', async () => {
+      (prismaMock.post.findMany as jest.Mock).mockResolvedValue([
+        {
+          slug: 'rss-post',
+          title: 'RSS Test Post',
+          content: 'This is a test post for RSS.',
+          createdAt: new Date('2025-11-21T10:00:00Z'),
+        },
+      ]);
+
+      const res = await request(app).get('/feed.xml').expect(200);
+
+      expect(res.text).toContain('<item>');
+      expect(res.text).toContain('<title>RSS Test Post</title>');
+      expect(res.text).toContain(`<link>${frontendUrl}/posts/rss-post</link>`);
+      expect(res.text).toContain('<guid>');
+      expect(res.text).toContain('<pubDate>');
+      expect(res.text).toContain('<description>This is a test post for RSS.</description>');
+    });
+
+    it('should handle long content by truncating description', async () => {
+      const longContent = 'a'.repeat(600);
+
+      (prismaMock.post.findMany as jest.Mock).mockResolvedValue([
+        {
+          slug: 'long-post',
+          title: 'Long Content Post',
+          content: longContent,
+          createdAt: new Date('2025-11-21T10:00:00Z'),
+        },
+      ]);
+
+      const res = await request(app).get('/feed.xml').expect(200);
+
+      expect(res.text).toContain('Long Content Post');
+      // Should be truncated and end with "..."
+      expect(res.text).toContain(`${'a'.repeat(500)}...`);
+    });
+
+    it('should handle database errors gracefully', async () => {
+      (prismaMock.post.findMany as jest.Mock).mockRejectedValue(new Error('Database error'));
+
+      const res = await request(app).get('/feed.xml').expect(500);
+
+      expect(res.body).toHaveProperty('error');
+      expect(res.body.error).toBe('Failed to generate RSS feed');
+    });
+  });
 });
