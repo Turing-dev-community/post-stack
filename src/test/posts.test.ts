@@ -182,6 +182,48 @@ describe("Blog Post Routes", () => {
 			).toBe(true);
 		});
 
+		it("should search posts across title and content using unified search param", async () => {
+			await prisma.post.createMany({
+				data: [
+					{
+						title: "JavaScript Tutorial",
+						content: "# Content about JS",
+						slug: "javascript-tutorial-unified",
+						published: true,
+						authorId: userId,
+					},
+					{
+						title: "Some Other Post",
+						content: "# Deep dive into JavaScript features",
+						slug: "javascript-content-only",
+						published: true,
+						authorId: userId,
+					},
+					{
+						title: "Irrelevant Post",
+						content: "# Nothing to see here",
+						slug: "no-match-post",
+						published: true,
+						authorId: userId,
+					},
+				],
+			});
+
+			const response = await fetch(`${baseUrl}/posts?search=JavaScript`);
+
+			const data: any = await response.json();
+
+			expect(response.status).toBe(200);
+			expect(data.posts).toHaveLength(2);
+			expect(
+				data.posts.every(
+					(post: any) =>
+						post.title.toLowerCase().includes("javascript") ||
+						post.content.toLowerCase().includes("javascript")
+				)
+			).toBe(true);
+		});
+
 		it("should perform case-insensitive search", async () => {
 			await prisma.post.create({
 				data: {
@@ -201,6 +243,7 @@ describe("Blog Post Routes", () => {
 			expect(data.posts).toHaveLength(1);
 			expect(data.posts[0].title).toBe("JavaScript Tutorial");
 		});
+
 
 		it("should support partial matching", async () => {
 			await prisma.post.createMany({

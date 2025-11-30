@@ -19,7 +19,37 @@ function buildPostWhereClause(filters: PostFilters): any {
 		},
 	};
 
-	if (filters.title?.trim()) {
+	// Unified search: search in title, content, and tag names
+	if (filters.search?.trim()) {
+		const searchTerm = filters.search.trim();
+		whereClause.OR = [
+			{
+				title: {
+					contains: searchTerm,
+					mode: "insensitive",
+				},
+			},
+			{
+				content: {
+					contains: searchTerm,
+					mode: "insensitive",
+				},
+			},
+			{
+				tags: {
+					some: {
+						tag: {
+							name: {
+								contains: searchTerm,
+								mode: "insensitive",
+							},
+						},
+					},
+				},
+			},
+		];
+	} else if (filters.title?.trim()) {
+		// Legacy title-only search (for backward compatibility)
 		whereClause.title = {
 			contains: filters.title.trim(),
 			mode: "insensitive",
