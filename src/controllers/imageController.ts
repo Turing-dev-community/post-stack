@@ -27,7 +27,9 @@ export const upload = async (
 		return;
 	}
 
-	const filePath = path.join(uploadsDir, req.file.filename);
+	// Sanitize filename to prevent directory traversal
+	const sanitizedFilename = path.basename(req.file.filename);
+	const filePath = path.join(uploadsDir, sanitizedFilename);
 
 	// Validate image dimensions
 	try {
@@ -65,12 +67,12 @@ export const upload = async (
 		return;
 	}
 
-	const imagePath = `/api/images/${req.file.filename}`;
+	const imagePath = `/api/images/${sanitizedFilename}`;
 
 	res.status(201).json({
 		message: "Image uploaded successfully",
 		path: imagePath,
-		filename: req.file.filename,
+		filename: sanitizedFilename,
 	});
 };
 
