@@ -3,6 +3,10 @@ import { setupPrismaMock } from "./utils/mockPrisma";
 import jwt from "jsonwebtoken";
 import fs from "fs";
 import path from "path";
+import sizeOf from "image-size";
+
+jest.mock("image-size");
+const mockedSizeOf = sizeOf as unknown as jest.Mock;
 // Import prisma and app AFTER mocks are set up
 import { prisma } from "../lib/prisma";
 import app from "../index";
@@ -39,6 +43,13 @@ describe("Image Routes", () => {
 	};
 
 	beforeEach(async () => {
+		// By default, treat images as small/valid dimensions
+		mockedSizeOf.mockReturnValue({
+			width: 1,
+			height: 1,
+			type: "png",
+		});
+
 		// Mock user for authentication
 		(prismaMock.user.findUnique as jest.Mock).mockResolvedValue(mockUser);
 
@@ -61,16 +72,17 @@ describe("Image Routes", () => {
 	});
 
 	describe("POST /api/images/upload", () => {
-		it("should upload an image successfully when authenticated", async () => {
+		it("should upload a small image successfully when authenticated", async () => {
+			// 1x1 PNG
 			const pngBuffer = Buffer.from(
-				"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+				"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PqzM6QAAAABJRU5ErkJggg==",
 				"base64"
 			);
 
 			const response = await request(appInstance)
 				.post("/api/images/upload")
 				.set("Authorization", `Bearer ${authToken}`)
-				.attach("image", pngBuffer, "test.png")
+				.attach("image", pngBuffer, "small.png")
 				.expect(201);
 
 			expect(response.body).toHaveProperty(
@@ -85,6 +97,38 @@ describe("Image Routes", () => {
 			// Verify file was created
 			const filePath = path.join(uploadsDir, response.body.filename);
 			expect(fs.existsSync(filePath)).toBe(true);
+		});
+
+		it("should reject an image that exceeds maximum dimensions", async () => {
+			// Simulate very large image dimensions via mocked image-size
+			mockedSizeOf.mockReturnValueOnce({
+				width: 5000,
+				height: 5000,
+				type: "png",
+			});
+
+			const largePngBuffer = Buffer.from(
+				"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PqzM6QAAAABJRU5ErkJggg==",
+				"base64"
+			);
+
+			const response = await request(appInstance)
+				.post("/api/images/upload")
+				.set("Authorization", `Bearer ${authToken}`)
+				.attach("image", largePngBuffer, "large.png")
+				.expect(400);
+
+			expect(response.body).toHaveProperty(
+				"error",
+				"Image dimensions too large"
+			);
+			expect(response.body.message).toContain("Image dimensions must be at most");
+
+			// File should not remain on disk
+			if (response.body.filename) {
+				const filePath = path.join(uploadsDir, response.body.filename);
+				expect(fs.existsSync(filePath)).toBe(false);
+			}
 		});
 
 		it("should reject upload when not authenticated", async () => {
@@ -123,6 +167,73 @@ describe("Image Routes", () => {
 				.expect(400);
 
 			expect(response.body).toHaveProperty("error", "No file uploaded");
+		});
+
+		it("should accept JPEG image at maximum allowed dimensions (4000x4000)", async () => {
+			// Mock image-size to return exactly at the limit
+			mockedSizeOf.mockReturnValueOnce({
+				width: 4000,
+				height: 4000,
+				type: "jpg",
+			});
+
+			// Minimal valid JPEG buffer (1x1 pixel JPEG)
+			const jpegBuffer = Buffer.from(
+				"/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwA/wA==",
+				"base64"
+			);
+
+			const response = await request(appInstance)
+				.post("/api/images/upload")
+				.set("Authorization", `Bearer ${authToken}`)
+				.attach("image", jpegBuffer, "test.jpg")
+				.expect(201);
+
+			expect(response.body).toHaveProperty(
+				"message",
+				"Image uploaded successfully"
+			);
+			expect(response.body).toHaveProperty("path");
+			expect(response.body).toHaveProperty("filename");
+			expect(response.body.path).toMatch(/^\/api\/images\/.+/);
+
+			// Verify file was created
+			const filePath = path.join(uploadsDir, response.body.filename);
+			expect(fs.existsSync(filePath)).toBe(true);
+		});
+
+		it("should reject WebP image that exceeds maximum dimensions (4001x4001)", async () => {
+			// Mock image-size to return dimensions just over the limit
+			mockedSizeOf.mockReturnValueOnce({
+				width: 4001,
+				height: 4001,
+				type: "webp",
+			});
+
+			// Minimal valid WebP buffer
+			const webpBuffer = Buffer.from(
+				"UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoBAAEAAwA0JaQAA3AA/vuUAAA=",
+				"base64"
+			);
+
+			const response = await request(appInstance)
+				.post("/api/images/upload")
+				.set("Authorization", `Bearer ${authToken}`)
+				.attach("image", webpBuffer, "large.webp")
+				.expect(400);
+
+			expect(response.body).toHaveProperty(
+				"error",
+				"Image dimensions too large"
+			);
+			expect(response.body.message).toContain("Image dimensions must be at most");
+			expect(response.body.message).toContain("4000x4000");
+
+			// File should not remain on disk
+			if (response.body.filename) {
+				const filePath = path.join(uploadsDir, response.body.filename);
+				expect(fs.existsSync(filePath)).toBe(false);
+			}
 		});
 	});
 
