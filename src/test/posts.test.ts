@@ -224,6 +224,58 @@ describe("Blog Post Routes", () => {
 			).toBe(true);
 		});
 
+		it("should return empty results for non-matching unified search term", async () => {
+			await prisma.post.create({
+				data: {
+					title: "JavaScript Tutorial",
+					content: "# JavaScript Content",
+					slug: "javascript-tutorial",
+					published: true,
+					authorId: userId,
+				},
+			});
+
+			const response = await fetch(`${baseUrl}/posts?search=NonExistentTerm`);
+
+			const data: any = await response.json();
+
+			expect(response.status).toBe(200);
+			expect(data.posts).toHaveLength(0);
+			expect(data.pagination.total).toBe(0);
+		});
+
+		it("should work with pagination and unified search together", async () => {
+			// Create multiple posts with similar search terms
+			const posts = Array.from({ length: 15 }, (_, i) => ({
+				title: `JavaScript Post ${i + 1}`,
+				content: `# JavaScript Content ${i + 1}`,
+				slug: `javascript-post-${i + 1}`,
+				published: true,
+				authorId: userId,
+			}));
+
+			await prisma.post.createMany({ data: posts });
+
+			const response = await fetch(
+				`${baseUrl}/posts?search=JavaScript&page=2&limit=5`
+			);
+
+			const data: any = await response.json();
+
+			expect(response.status).toBe(200);
+			expect(data.pagination.page).toBe(2);
+			expect(data.pagination.limit).toBe(5);
+			expect(data.posts).toHaveLength(5);
+			expect(data.pagination.total).toBe(15);
+			expect(
+				data.posts.every(
+					(post: any) =>
+						post.title.toLowerCase().includes("javascript") ||
+						post.content.toLowerCase().includes("javascript")
+				)
+			).toBe(true);
+		});
+
 		it("should perform case-insensitive search", async () => {
 			await prisma.post.create({
 				data: {
