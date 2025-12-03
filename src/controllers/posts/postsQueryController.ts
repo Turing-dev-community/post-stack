@@ -10,6 +10,7 @@ export async function getAllPosts(req: AuthRequest, res: Response): Promise<Resp
   const page = parseInt(req.query.page as string) || 1;
   const limit = parseInt(req.query.limit as string) || 10;
   const titleQuery = req.query.title as string;
+  const searchQuery = req.query.search as string;
   const authorIdQuery = req.query.authorId as string;
   const categoryIdQuery = req.query.categoryId as string;
   const tagNameQuery = req.query.tag as string;
@@ -20,7 +21,8 @@ export async function getAllPosts(req: AuthRequest, res: Response): Promise<Resp
 
   // Validate query parameters
   const validation = postsService.validatePostQueryParams(
-    titleQuery,
+    // Prefer unified search param when provided, fall back to legacy title param
+    searchQuery ?? titleQuery,
     sortBy,
     sortOrder,
     fromDateQuery,
@@ -35,6 +37,7 @@ export async function getAllPosts(req: AuthRequest, res: Response): Promise<Resp
 
   const filters: postsService.PostFilters = {
     title: titleQuery,
+    search: searchQuery,
     authorId: authorIdQuery,
     categoryId: categoryIdQuery,
     tag: tagNameQuery,
