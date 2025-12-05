@@ -4,7 +4,14 @@ import { Request, Response, NextFunction } from 'express';
 import { prisma } from '../lib/prisma';
 import type { User } from '@prisma/client';
 import type { Role } from '../middleware/authorization';
-import { ACCOUNT_LOCKOUT_DURATION_MS } from '../constants/auth';
+import type { StringValue } from 'ms';
+import { 
+  ACCOUNT_LOCKOUT_DURATION_MS,
+  getJWTExpiresIn,
+  getAccessTokenExpiresIn,
+  getRefreshTokenExpiresIn,
+  parseJWTExpiration
+} from '../constants/auth';
 
 export interface AuthRequest extends Request {
   user?: {
@@ -36,23 +43,25 @@ export const getUserRole = async (userId: string, email: string): Promise<Role> 
 
 export const generateToken = (userId: string): string => {
   return jwt.sign({ userId }, process.env.JWT_SECRET!, {
-    expiresIn: '7d',
+    expiresIn: getJWTExpiresIn() as StringValue | number,
   });
 };
 
 export const generateAccessToken = (userId: string): string => {
   return jwt.sign({ userId }, process.env.JWT_SECRET!, {
-    expiresIn: '15m', 
+    expiresIn: getAccessTokenExpiresIn() as StringValue | number, 
   });
 };
 
 export const generateRefreshToken = async (userId: string): Promise<string> => {
+  const refreshTokenExpiration = getRefreshTokenExpiresIn();
   const token = jwt.sign({ userId }, process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET!, {
-    expiresIn: '7d',
+    expiresIn: refreshTokenExpiration as StringValue | number,
   });
 
-  const expiresAt = new Date();
-  expiresAt.setDate(expiresAt.getDate() + 7);
+  // Calculate expiration date based on the configured refresh token expiration time
+  const expirationMs = parseJWTExpiration(refreshTokenExpiration);
+  const expiresAt = new Date(Date.now() + expirationMs);
 
   await prisma.refreshToken.create({
     data: {
