@@ -446,3 +446,26 @@ export async function getUserPublicProfile(userId: string) {
     followingCount,
   };
 }
+
+export async function deleteUser(userId: string): Promise<void> {
+  // Check if user exists
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, deletedAt: true },
+  });
+
+  if (!user) {
+    throw new Error('User not found');
+  }
+
+  // Check if user is already deleted
+  if (user.deletedAt) {
+    throw new Error('User already deleted');
+  }
+
+  // Soft delete the user by setting deletedAt
+  await prisma.user.update({
+    where: { id: userId },
+    data: { deletedAt: new Date() },
+  });
+}

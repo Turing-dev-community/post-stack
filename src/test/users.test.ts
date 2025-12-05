@@ -597,5 +597,78 @@ describe('User Followers Routes', () => {
     });
   });
 
+  describe('DELETE /api/users/', () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+      invalidateCache.invalidateAll();
+    });
+
+    it('should successfully delete a user', async () => {
+      const targetUserId = 'user-to-delete';
+
+      // Mock: User exists and is not deleted
+      (prismaMock.user.findUnique as jest.Mock).mockResolvedValue({
+        id: targetUserId,
+        deletedAt: null,
+      });
+
+      // Mock: Update user to set deletedAt
+      (prismaMock.user.update as jest.Mock).mockResolvedValue({
+        id: targetUserId,
+        deletedAt: new Date(),
+      });
+
+      const response = await request(app)
+        .delete('/api/users/')
+        .send({ userId: targetUserId })
+        .expect(200);
+
+      expect(response.body.message).toBe('User deleted successfully');
+      expect(prismaMock.user.findUnique).toHaveBeenCalledWith({
+        where: { id: targetUserId },
+        select: { id: true, deletedAt: true },
+      });
+      expect(prismaMock.user.update).toHaveBeenCalledWith({
+        where: { id: targetUserId },
+        data: { deletedAt: expect.any(Date) },
+      });
+    });
+
+    it('should return 404 when user does not exist', async () => {
+      const nonExistentUserId = 'non-existent-user';
+
+      // Mock: User not found
+      (prismaMock.user.findUnique as jest.Mock).mockResolvedValue(null);
+
+      const response = await request(app)
+        .delete('/api/users/')
+        .send({ userId: nonExistentUserId })
+        .expect(404);
+
+      expect(response.body.error).toBe('User not found');
+      expect(response.body.message).toBe('This user account does not exist.');
+      expect(prismaMock.user.update).not.toHaveBeenCalled();
+    });
+
+    it('should return 400 when user is already deleted', async () => {
+      const deletedUserId = 'deleted-user';
+
+      // Mock: User exists but is already deleted
+      (prismaMock.user.findUnique as jest.Mock).mockResolvedValue({
+        id: deletedUserId,
+        deletedAt: new Date('2024-01-01'),
+      });
+
+      const response = await request(app)
+        .delete('/api/users/')
+        .send({ userId: deletedUserId })
+        .expect(400);
+
+      expect(response.body.error).toBe('User already deleted');
+      expect(response.body.message).toBe('This user account has already been deleted.');
+      expect(prismaMock.user.update).not.toHaveBeenCalled();
+    });
+  });
+
   
 });
