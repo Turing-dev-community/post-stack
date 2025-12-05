@@ -1,7 +1,7 @@
 import { Response } from 'express';
 import { AuthRequest } from '../utils/auth';
 import { asyncHandler } from '../middleware/validation';
-import { followUser as followUserService, unfollowUser as unfollowUserService, getFollowers as getFollowersService, getFollowing as getFollowingService, getUserPublicProfile as getUserPublicProfileService, getUserActivity as getUserActivityService} from '../services/usersService';
+import { followUser as followUserService, unfollowUser as unfollowUserService, getFollowers as getFollowersService, getFollowing as getFollowingService, getUserPublicProfile as getUserPublicProfileService, getUserActivity as getUserActivityService, deleteUser as deleteUserService} from '../services/usersService';
 import { checkAuth } from '../utils/authDecorator';
 
 export const followUser = asyncHandler(async (req: AuthRequest, res: Response) => {
@@ -138,6 +138,42 @@ export const getUserPublicProfile = asyncHandler(async (req: AuthRequest, res: R
         message: 'This user account does not exist or has been deactivated.',
       });
     }
+    throw error;
+  }
+});
+
+export const deleteUser = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { userId } = req.body;
+
+  if (!userId) {
+    return res.status(400).json({
+      error: 'User ID is required',
+      message: 'Please provide a userId in the request body',
+    });
+  }
+
+  try {
+    await deleteUserService(userId);
+
+    return res.json({
+      message: 'User deleted successfully',
+    });
+  } catch (error: any) {
+    if (error.message === 'User not found') {
+      return res.status(404).json({
+        error: 'User not found',
+        message: 'This user account does not exist.',
+      });
+    }
+
+    if (error.message === 'User already deleted') {
+      return res.status(400).json({
+        error: 'User already deleted',
+        message: 'This user account has already been deleted.',
+      });
+    }
+
+    // Unknown error
     throw error;
   }
 });
