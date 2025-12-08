@@ -11,6 +11,7 @@ import tagRoutes from './routes/tags';
 import imageRoutes from './routes/images';
 import reportRoutes from './routes/reports';
 import sitemapRoutes from './routes/sitemap';
+import postsAnalyticsRoutes from './routes/postsAnalytics';
 import { authenticateToken } from './utils/auth';
 import { errorHandler } from './middleware/validation';
 import globalRateLimit from './middleware/rateLimit';
@@ -61,6 +62,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/tags', tagRoutes);
 app.use('/api/images', imageRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/analytics/posts', postsAnalyticsRoutes);
 app.use('/', sitemapRoutes);
 
 // Protected Example
