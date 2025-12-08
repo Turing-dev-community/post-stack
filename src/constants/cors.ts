@@ -1,7 +1,6 @@
 // CORS Configuration Constants
 
 // Default frontend URLs for different environments
-export const DEFAULT_FRONTEND_URLS_DEV = ['http://localhost:3000', 'http://localhost:3001'];
 export const DEFAULT_FRONTEND_URL_DEV = 'http://localhost:3000';
 
 // Production frontend URL from environment
