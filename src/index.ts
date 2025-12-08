@@ -15,6 +15,7 @@ import { authenticateToken } from './utils/auth';
 import { errorHandler } from './middleware/validation';
 import globalRateLimit from './middleware/rateLimit';
 import requestTimeout from './middleware/timeout';
+import bodySizeLimitMiddleware from './middleware/bodySizeLimit';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -33,6 +34,8 @@ app.use(globalRateLimit);
 
 // Request Timeout
 app.use(requestTimeout);
+// Body Size Limit Validation (before parsing)
+app.use(bodySizeLimitMiddleware);
 
 // Body Parsing
 app.use(express.json({ limit: '10mb' }));
