@@ -14,6 +14,7 @@ import sitemapRoutes from './routes/sitemap';
 import { authenticateToken } from './utils/auth';
 import { errorHandler } from './middleware/validation';
 import globalRateLimit from './middleware/rateLimit';
+import { validateCorsOrigins } from './utils/corsValidator';
 import requestTimeout from './middleware/timeout';
 import bodySizeLimitMiddleware from './middleware/bodySizeLimit';
 
@@ -81,6 +82,9 @@ export default app;
 
 // ⭐ SERVER STARTS ONLY IN NON-TEST ENVIRONMENT
 if (process.env.NODE_ENV !== 'test') {
+  // Validate CORS origins at startup
+  validateCorsOrigins();
+
   app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
     console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
