@@ -14,6 +14,7 @@ import sitemapRoutes from './routes/sitemap';
 import { authenticateToken } from './utils/auth';
 import { errorHandler } from './middleware/validation';
 import globalRateLimit from './middleware/rateLimit';
+import requestTimeout from './middleware/timeout';
 import bodySizeLimitMiddleware from './middleware/bodySizeLimit';
 
 const app = express();
@@ -31,6 +32,8 @@ app.use(cors({
 // Rate Limiting
 app.use(globalRateLimit);
 
+// Request Timeout
+app.use(requestTimeout);
 // Body Size Limit Validation (before parsing)
 app.use(bodySizeLimitMiddleware);
 
