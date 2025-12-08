@@ -117,7 +117,7 @@ router.post(
 
 // Create multiple posts in bulk
 router.post('/bulk', validateBulkPosts, authenticateToken, requireAuthor, handleValidationErrors, asyncHandler(
-  (req: AuthRequest, res: Response) => postsController.bulkCreatePosts(req, res)
+	(req: AuthRequest, res: Response) => postsController.bulkCreatePosts(req, res)
 ));
 
 // Update post
@@ -210,6 +210,15 @@ router.delete(
 	authenticateToken,
 	asyncHandler((req: AuthRequest, res: Response) =>
 		postsController.unschedulePost(req, res)
+	)
+);
+
+// Clone a post as a new draft
+router.post(
+	"/:postId/clone",
+	authenticateToken,
+	asyncHandler((req: AuthRequest, res: Response) =>
+		postsController.clonePost(req, res)
 	)
 );
 
