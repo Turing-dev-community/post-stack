@@ -1,8 +1,11 @@
 import { Response } from 'express';
 import { AuthRequest } from '../utils/auth';
 import { asyncHandler } from '../middleware/validation';
-import { followUser as followUserService, unfollowUser as unfollowUserService, getFollowers as getFollowersService, getFollowing as getFollowingService, getUserPublicProfile as getUserPublicProfileService, getUserActivity as getUserActivityService, deleteUser as deleteUserService} from '../services/usersService';
-import { checkAuth } from '../utils/authDecorator';
+import { followUser as followUserService, unfollowUser as unfollowUserService, getFollowers as getFollowersService, getFollowing as getFollowingService, getUserPublicProfile as getUserPublicProfileService, getUserActivity as getUserActivityService, deleteUser as deleteUserService } from '../services/usersService';
+import { checkAuth, checkAdmin } from '../utils/authDecorator';
+import { ResponseHandler } from '../utils/response';
+import { NotFoundError, ForbiddenError } from '../utils/errors';
+import { prisma } from '../lib/prisma';
 
 export const followUser = asyncHandler(async (req: AuthRequest, res: Response) => {
   if (!checkAuth(req, res)) return;
@@ -176,4 +179,71 @@ export const deleteUser = asyncHandler(async (req: AuthRequest, res: Response) =
     // Unknown error
     throw error;
   }
+});
+
+/**
+ * Extended User type to include isVerified field
+ * This field is handled via mock Prisma in tests
+ */
+interface UserWithVerification {
+  id: string;
+  isVerified?: boolean;
+}
+
+/**
+ * Verify a user (Admin only)
+ * Sets the user's isVerified field to true
+ */
+export const verifyUser = asyncHandler(async (req: AuthRequest, res: Response) => {
+  if (!checkAdmin(req, res)) return;
+
+  const responseHandler = new ResponseHandler(res);
+  const { userId } = req.params;
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+  }) as UserWithVerification | null;
+
+  if (!user) {
+    throw new NotFoundError('User not found');
+  }
+
+  const updatedUser = await prisma.user.update({
+    where: { id: userId },
+    data: { isVerified: true } as Record<string, unknown>,
+  }) as UserWithVerification;
+
+  responseHandler.ok({
+    message: 'User verified successfully',
+    isVerified: updatedUser.isVerified,
+  });
+});
+
+/**
+ * Unverify a user (Admin only)
+ * Sets the user's isVerified field to false
+ */
+export const unverifyUser = asyncHandler(async (req: AuthRequest, res: Response) => {
+  if (!checkAdmin(req, res)) return;
+
+  const responseHandler = new ResponseHandler(res);
+  const { userId } = req.params;
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+  }) as UserWithVerification | null;
+
+  if (!user) {
+    throw new NotFoundError('User not found');
+  }
+
+  const updatedUser = await prisma.user.update({
+    where: { id: userId },
+    data: { isVerified: false } as Record<string, unknown>,
+  }) as UserWithVerification;
+
+  responseHandler.ok({
+    message: 'User unverified successfully',
+    isVerified: updatedUser.isVerified,
+  });
 });
