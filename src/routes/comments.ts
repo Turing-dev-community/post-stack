@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { authenticateToken } from '../utils/auth';
 import { validateComment, validateCommentReport } from '../middleware/validators';
 import { handleValidationErrors } from '../middleware/validation';
-import { 
+import {
   getCommentsForPost,
   createComment,
   replyToComment,
@@ -13,6 +13,8 @@ import {
   reportComment,
   moderateComment,
   getModerationQueue,
+  pinComment,
+  unpinComment,
 } from '../controllers/commentsController';
 
 const router = Router();
@@ -79,6 +81,20 @@ router.get(
   '/:postId/moderation-queue',
   authenticateToken,
   getModerationQueue
+);
+
+// Pin a comment to the top of a post
+router.post(
+  '/:postId/comments/:commentId/pin',
+  authenticateToken,
+  pinComment
+);
+
+// Unpin a comment from the top of a post
+router.delete(
+  '/:postId/comments/:commentId/pin',
+  authenticateToken,
+  unpinComment
 );
 
 export default router;

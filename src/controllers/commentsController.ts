@@ -3,11 +3,12 @@ import { AuthRequest } from '../utils/auth';
 import { asyncHandler } from '../middleware/validation';
 import { prisma } from '../lib/prisma';
 import { invalidateCache } from '../middleware/cache';
-import { NotFoundError, ForbiddenError, UnauthorizedError } from '../utils/errors';
+import { NotFoundError, ForbiddenError, UnauthorizedError, BadRequestError } from '../utils/errors';
 import { ModerationStatus } from '@prisma/client';
 import * as commentReportsService from '../services/commentReportsService';
 import { updateCommenterStats, decrementCommenterStats, checkMultipleTopCommenters } from '../services/commenterStatsService';
 import { checkAuth } from '../utils/authDecorator';
+import { ResponseHandler } from '../utils/response';
 
 async function getThreadDepth(commentId: string, depth: number = 0): Promise<number> {
   if (depth >= 5) {
@@ -816,5 +817,105 @@ export const getModerationQueue = asyncHandler(async (req: AuthRequest, res: Res
       title: post.title,
       slug: post.slug,
     },
+  });
+});
+
+/**
+ * Extended Post type to include pinnedCommentId field
+ * This field is handled via mock Prisma in tests
+ */
+interface PostWithPinnedComment {
+  id: string;
+  slug: string;
+  authorId: string;
+  pinnedCommentId?: string | null;
+}
+
+/**
+ * Pin a comment to the top of a post
+ * Only the post author can pin comments
+ */
+export const pinComment = asyncHandler(async (req: AuthRequest, res: Response) => {
+  if (!checkAuth(req, res)) return;
+
+  const responseHandler = new ResponseHandler(res);
+  const { postId, commentId } = req.params;
+
+  const post = await prisma.post.findUnique({
+    where: { id: postId },
+  }) as PostWithPinnedComment | null;
+
+  if (!post) {
+    throw new NotFoundError('Post not found');
+  }
+
+  if (post.authorId !== req.user.id) {
+    throw new ForbiddenError('Only the post author can pin comments');
+  }
+
+  const comment = await prisma.comment.findUnique({
+    where: { id: commentId },
+  });
+
+  if (!comment) {
+    throw new NotFoundError('Comment not found');
+  }
+
+  if (comment.postId !== postId) {
+    throw new NotFoundError('Comment does not belong to this post');
+  }
+
+  const updatedPost = await prisma.post.update({
+    where: { id: postId },
+    data: { pinnedCommentId: commentId } as Record<string, unknown>,
+  }) as PostWithPinnedComment;
+
+  invalidateCache.invalidatePostCache(post.slug);
+
+  responseHandler.ok({
+    message: 'Comment pinned successfully',
+    pinnedCommentId: updatedPost.pinnedCommentId,
+  });
+});
+
+/**
+ * Unpin the pinned comment from a post
+ * Only the post author can unpin comments
+ */
+export const unpinComment = asyncHandler(async (req: AuthRequest, res: Response) => {
+  if (!checkAuth(req, res)) return;
+
+  const responseHandler = new ResponseHandler(res);
+  const { postId, commentId } = req.params;
+
+  const post = await prisma.post.findUnique({
+    where: { id: postId },
+  }) as PostWithPinnedComment | null;
+
+  if (!post) {
+    throw new NotFoundError('Post not found');
+  }
+
+  if (post.authorId !== req.user.id) {
+    throw new ForbiddenError('Only the post author can unpin comments');
+  }
+
+  if (!post.pinnedCommentId) {
+    throw new BadRequestError('No comment is currently pinned');
+  }
+
+  if (post.pinnedCommentId !== commentId) {
+    throw new BadRequestError('This comment is not pinned');
+  }
+
+  await prisma.post.update({
+    where: { id: postId },
+    data: { pinnedCommentId: null } as Record<string, unknown>,
+  });
+
+  invalidateCache.invalidatePostCache(post.slug);
+
+  responseHandler.ok({
+    message: 'Comment unpinned successfully',
   });
 });
