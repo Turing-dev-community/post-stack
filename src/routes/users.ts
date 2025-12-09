@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authenticateToken } from '../utils/auth';
-import { followUser, unfollowUser, getFollowers, getFollowing, getUserActivity, getUserPublicProfile, deleteUser } from '../controllers/usersController';
+import { followUser, unfollowUser, getFollowers, getFollowing, getUserActivity, getUserPublicProfile, deleteUser, verifyUser, unverifyUser } from '../controllers/usersController';
 import { validatePagination } from '../middleware/validators';
 import { handleValidationErrors } from '../middleware/validation';
 import { cacheMiddleware } from '../middleware/cache';
@@ -52,6 +52,19 @@ router.get(
 router.delete(
   '/',
   deleteUser
+);
+
+// Admin-only routes: User verification
+router.patch(
+  '/:userId/verify',
+  authenticateToken,
+  verifyUser
+);
+
+router.delete(
+  '/:userId/verify',
+  authenticateToken,
+  unverifyUser
 );
 
 export default router;
