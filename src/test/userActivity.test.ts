@@ -1,3 +1,12 @@
+import { PrismaClient } from '@prisma/client';
+import { mockDeep } from 'jest-mock-extended';
+
+// Mock prisma before importing it
+jest.mock('../lib/prisma', () => ({
+  __esModule: true,
+  prisma: mockDeep<PrismaClient>(),
+}));
+
 import request from 'supertest';
 import { setupPrismaMock } from './utils/mockPrisma';
 import { prisma } from '../lib/prisma';
