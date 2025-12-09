@@ -1,7 +1,7 @@
 import { Response, Request } from "express";
 import path from "path";
 import fs from "fs";
-import { imageSize } from "image-size";
+import sizeOf from "image-size";
 import { AuthRequest } from "../utils/auth";
 
 const uploadsDir = path.join(process.cwd(), "uploads");
@@ -34,7 +34,7 @@ export const upload = async (
   // Validate image dimensions
   try {
     const imageBuffer = fs.readFileSync(filePath);
-    const dimensions = imageSize(imageBuffer);
+    const dimensions = sizeOf(imageBuffer);
     const width = dimensions.width || 0;
     const height = dimensions.height || 0;
 
