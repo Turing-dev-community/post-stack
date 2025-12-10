@@ -4,6 +4,7 @@ import {
   URL_PATTERN,
   LOCALHOST_PATTERN,
 } from '../constants/cors';
+import logger from './logger';
 
 export interface CorsValidationResult {
   isValid: boolean;
@@ -69,14 +70,14 @@ export const validateCorsOrigins = (exitOnError = true): CorsValidationResult =>
   }
 
   // Log warnings
-  result.warnings.forEach((warning) => console.warn(warning));
+  result.warnings.forEach((warning) => logger.warn(warning));
 
   // Log errors
-  result.errors.forEach((error) => console.error(error));
+  result.errors.forEach((error) => logger.error(error));
 
   // Exit if there are critical errors and exitOnError is true
   if (!result.isValid && exitOnError && nodeEnv === 'production') {
-    console.error('❌ CORS configuration is invalid. Server cannot start.');
+    logger.error('CORS configuration is invalid. Server cannot start.');
     process.exit(1);
   }
 

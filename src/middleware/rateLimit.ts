@@ -1,8 +1,13 @@
 import rateLimit from 'express-rate-limit';
 import { RATE_LIMIT_WINDOW_MS, RATE_LIMIT_MAX_REQUESTS } from '../constants/rateLimit';
+import logger from '../utils/logger';
 
-// Debug: Log the rate limiting configuration
-console.log(`🔒 Rate limiting config: ${RATE_LIMIT_MAX_REQUESTS} requests per ${RATE_LIMIT_WINDOW_MS}ms (${RATE_LIMIT_WINDOW_MS/1000/60} minutes)`);
+// Log the rate limiting configuration
+logger.debug('Rate limiting configured', {
+  maxRequests: RATE_LIMIT_MAX_REQUESTS,
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  windowMinutes: RATE_LIMIT_WINDOW_MS / 1000 / 60,
+});
 
 // Global rate limiting middleware
 const globalRateLimit = rateLimit({

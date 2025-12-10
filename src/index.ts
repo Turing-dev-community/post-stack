@@ -17,6 +17,7 @@ import globalRateLimit from './middleware/rateLimit';
 import { validateCorsOrigins } from './utils/corsValidator';
 import requestTimeout from './middleware/timeout';
 import bodySizeLimitMiddleware from './middleware/bodySizeLimit';
+import logger from './utils/logger';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -86,8 +87,10 @@ if (process.env.NODE_ENV !== 'test') {
   validateCorsOrigins();
 
   app.listen(PORT, () => {
-    console.log(`🚀 Server running on port ${PORT}`);
-    console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`🔗 Health check: http://localhost:${PORT}/health`);
+    logger.info('Server started', {
+      port: PORT,
+      env: process.env.NODE_ENV || 'development',
+      healthCheck: `http://localhost:${PORT}/health`,
+    });
   });
 }
