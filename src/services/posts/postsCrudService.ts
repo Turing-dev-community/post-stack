@@ -55,10 +55,10 @@ export async function createPost(data: CreatePostData, userId: string) {
 			tags:
 				data.tags && data.tags.length > 0
 					? {
-							create: data.tags.map((tagId: string) => ({
-								tagId,
-							})),
-					  }
+						create: data.tags.map((tagId: string) => ({
+							tagId,
+						})),
+					}
 					: undefined,
 		},
 		include: getPostIncludes(),
@@ -167,13 +167,13 @@ export async function updatePost(
 				tags:
 					data.tags !== undefined
 						? {
-								create:
-									data.tags && data.tags.length > 0
-										? data.tags.map((tagId: string) => ({
-												tagId,
-										  }))
-										: [],
-						  }
+							create:
+								data.tags && data.tags.length > 0
+									? data.tags.map((tagId: string) => ({
+										tagId,
+									}))
+									: [],
+						}
 						: undefined,
 			},
 			include: getPostIncludes(),
@@ -193,6 +193,13 @@ export async function updatePost(
 export async function deletePost(postId: string, userId: string) {
 	const existingPost = await prisma.post.findUnique({
 		where: { id: postId },
+		select: {
+			id: true,
+			slug: true,
+			authorId: true,
+			featuredImage: true,
+			ogImage: true,
+		},
 	});
 
 	if (!existingPost) {
@@ -206,6 +213,15 @@ export async function deletePost(postId: string, userId: string) {
 	await prisma.post.delete({
 		where: { id: postId },
 	});
+
+	// Clean up associated images after successful deletion
+	try {
+		const { cleanupPostImages } = await import("../imageCleanupService");
+		await cleanupPostImages(existingPost);
+	} catch (error) {
+		// Log error but don't fail the deletion
+		console.warn(`Failed to cleanup images for post ${postId}:`, error);
+	}
 
 	invalidateCache.invalidateListCaches();
 	invalidateCache.invalidatePostCache(existingPost.slug);
@@ -281,10 +297,10 @@ export async function bulkCreatePosts(
 					tags:
 						postData.tags && postData.tags.length > 0
 							? {
-									create: postData.tags.map((tagId: string) => ({
-										tagId,
-									})),
-							  }
+								create: postData.tags.map((tagId: string) => ({
+									tagId,
+								})),
+							}
 							: undefined,
 				},
 				include: getPostIncludes(),
