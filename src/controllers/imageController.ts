@@ -3,6 +3,8 @@ import path from "path";
 import fs from "fs";
 import { imageSize } from "image-size";
 import { AuthRequest } from "../utils/auth";
+import { ResponseHandler } from "../utils/response";
+import * as imageCleanupService from "../services/imageCleanupService";
 
 const uploadsDir = path.join(process.cwd(), "uploads");
 
@@ -110,4 +112,52 @@ export const get = async (req: Request, res: Response): Promise<void> => {
   res.setHeader("Content-Type", contentType);
   res.setHeader("Cache-Control", "public, max-age=31536000");
   res.sendFile(filePath);
+};
+
+/**
+ * Get list of orphaned images (images not referenced by any post)
+ * GET /api/images/orphaned
+ */
+export const getOrphanedImages = async (
+  req: AuthRequest,
+  res: Response
+): Promise<void> => {
+  const responseHandler = new ResponseHandler(res);
+
+  try {
+    const orphanedImages = await imageCleanupService.getOrphanedImages();
+
+    responseHandler.ok({
+      message: "Orphaned images retrieved successfully",
+      count: orphanedImages.length,
+      images: orphanedImages,
+    });
+  } catch (error) {
+    responseHandler.error(error);
+  }
+};
+
+/**
+ * Delete all orphaned images
+ * DELETE /api/images/orphaned
+ */
+export const deleteOrphanedImages = async (
+  req: AuthRequest,
+  res: Response
+): Promise<void> => {
+  const responseHandler = new ResponseHandler(res);
+
+  try {
+    const result = await imageCleanupService.cleanupOrphanedImages();
+
+    responseHandler.ok({
+      message: "Orphaned images cleanup completed",
+      deletedCount: result.deleted.length,
+      failedCount: result.failed.length,
+      deleted: result.deleted,
+      failed: result.failed,
+    });
+  } catch (error) {
+    responseHandler.error(error);
+  }
 };

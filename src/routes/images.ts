@@ -8,6 +8,8 @@ import { requireAuthor } from "../middleware/authorization";
 import {
 	upload as uploadController,
 	get as getController,
+	getOrphanedImages as getOrphanedImagesController,
+	deleteOrphanedImages as deleteOrphanedImagesController,
 } from "../controllers/imageController";
 
 const router = Router();
@@ -87,7 +89,7 @@ router.use((error: any, req: Request, res: Response, next: any): void => {
 	if (
 		error &&
 		error.message ===
-			"Invalid file type. Only JPEG, PNG, GIF, and WebP images are allowed."
+		"Invalid file type. Only JPEG, PNG, GIF, and WebP images are allowed."
 	) {
 		res.status(400).json({
 			error: "Invalid file type",
@@ -98,6 +100,22 @@ router.use((error: any, req: Request, res: Response, next: any): void => {
 	next(error);
 });
 
+// Orphaned image management routes (admin only)
+router.get(
+	"/orphaned",
+	authenticateToken,
+	requireAuthor,
+	asyncHandler(getOrphanedImagesController)
+);
+
+router.delete(
+	"/orphaned",
+	authenticateToken,
+	requireAuthor,
+	asyncHandler(deleteOrphanedImagesController)
+);
+
+// This route must come last as it's a catch-all pattern
 router.get("/:filename", asyncHandler(getController));
 
 export default router;
