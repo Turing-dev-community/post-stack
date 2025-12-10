@@ -1,4 +1,4 @@
-import { body, query } from "express-validator";
+import { body, query, param } from "express-validator";
 import { PrismaClient } from "@prisma/client";
 import sanitizeHtml from 'sanitize-html';
 
@@ -299,4 +299,13 @@ export const validateTag = [
     .withMessage("Tag name must be between 1 and 50 characters")
     .matches(/^[a-zA-Z0-9\s-]+$/)
     .withMessage("Tag name can only contain letters, numbers, spaces, and hyphens"),
+];
+
+export const validateNotificationId = [
+  param("id")
+    .trim()
+    .notEmpty()
+    .withMessage("Notification ID cannot be empty")
+    .isLength({ min: 1, max: 255 })
+    .withMessage("Notification ID must be between 1 and 255 characters"),
 ];
