@@ -11,6 +11,7 @@ import tagRoutes from './routes/tags';
 import imageRoutes from './routes/images';
 import reportRoutes from './routes/reports';
 import sitemapRoutes from './routes/sitemap';
+import healthRoutes from './routes/health';
 import { authenticateToken } from './utils/auth';
 import { errorHandler } from './middleware/validation';
 import globalRateLimit from './middleware/rateLimit';
@@ -42,14 +43,8 @@ app.use(bodySizeLimitMiddleware);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Health Check Route
-app.get('/health', (req, res) => {
-  res.json({
-    status: 'OK',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-  });
-});
+// Health Check Routes (with DB connectivity check)
+app.use('/health', healthRoutes);
 
 // Routes
 app.use('/api/auth', authRoutes);

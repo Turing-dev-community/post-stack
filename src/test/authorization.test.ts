@@ -1,4 +1,4 @@
-import request from 'supertest';
+git chimport request from 'supertest';
 import { setupPrismaMock } from './utils/mockPrisma';
 import { prisma } from '../lib/prisma';
 import app from '../index';
