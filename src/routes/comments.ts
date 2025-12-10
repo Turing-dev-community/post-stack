@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { authenticateToken } from '../utils/auth';
 import { validateComment, validateCommentReport } from '../middleware/validators';
 import { handleValidationErrors } from '../middleware/validation';
-import { 
+import {
   getCommentsForPost,
   createComment,
   replyToComment,
@@ -14,6 +14,10 @@ import {
   moderateComment,
   getModerationQueue,
 } from '../controllers/commentsController';
+import {
+  subscribeToComment,
+  unsubscribeFromComment,
+} from '../controllers/commentSubscriptionController';
 
 const router = Router();
 
@@ -81,4 +85,17 @@ router.get(
   getModerationQueue
 );
 
+router.post(
+  '/:postId/comments/:commentId/subscribe',
+  authenticateToken,
+  subscribeToComment
+);
+
+router.delete(
+  '/:postId/comments/:commentId/subscribe',
+  authenticateToken,
+  unsubscribeFromComment
+);
+
 export default router;
+
