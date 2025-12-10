@@ -23,6 +23,15 @@ router.get(
 	)
 );
 
+// Export posts as CSV
+router.get(
+	"/export",
+	authenticateToken,
+	asyncHandler((req: AuthRequest, res: Response) =>
+		postsController.exportPosts(req, res)
+	)
+);
+
 router.get(
 	"/trending",
 	validatePagination,

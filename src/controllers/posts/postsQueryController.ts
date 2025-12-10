@@ -9,8 +9,8 @@ import { checkAuth } from '../../utils/authDecorator';
 export async function getAllPosts(req: AuthRequest, res: Response): Promise<Response> {
   const page = parseInt(req.query.page as string) || 1;
   const limit = parseInt(req.query.limit as string) || 10;
-  const titleQuery = req.query.title as string;
   const searchQuery = req.query.search as string;
+  const titleQuery = req.query.title as string;
   const authorIdQuery = req.query.authorId as string;
   const categoryIdQuery = req.query.categoryId as string;
   const tagNameQuery = req.query.tag as string;
@@ -21,8 +21,8 @@ export async function getAllPosts(req: AuthRequest, res: Response): Promise<Resp
 
   // Validate query parameters
   const validation = postsService.validatePostQueryParams(
-    // Prefer unified search param when provided, fall back to legacy title param
-    searchQuery ?? titleQuery,
+    searchQuery,
+    titleQuery,
     sortBy,
     sortOrder,
     fromDateQuery,
@@ -36,8 +36,8 @@ export async function getAllPosts(req: AuthRequest, res: Response): Promise<Resp
   }
 
   const filters: postsService.PostFilters = {
-    title: titleQuery,
     search: searchQuery,
+    title: titleQuery,
     authorId: authorIdQuery,
     categoryId: categoryIdQuery,
     tag: tagNameQuery,
@@ -129,6 +129,26 @@ export async function getRelatedPosts(req: AuthRequest, res: Response): Promise<
 }
 
 /**
+ * Export published posts as CSV file
+ */
+export async function exportPosts(req: AuthRequest, res: Response): Promise<Response> {
+  if (!checkAuth(req, res)) return res as Response;
+
+  const csv = await postsService.exportPostsToCsv();
+
+  if (!csv) {
+    return res.status(404).json({
+      error: 'No posts available to export',
+    });
+  }
+
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', 'attachment; filename="posts-export.csv"');
+
+  return res.status(200).send(csv);
+}
+
+/**
  * Get post by slug
  */
 export async function getPostBySlug(req: AuthRequest, res: Response): Promise<Response> {
@@ -176,4 +196,3 @@ export async function getDraftBySlug(req: AuthRequest, res: Response): Promise<R
     throw error;
   }
 }
-

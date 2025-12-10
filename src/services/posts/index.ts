@@ -18,6 +18,7 @@ export {
 	getRelatedPosts,
 	getPostBySlug,
 	getDraftBySlug,
+	exportPostsToCsv,
 } from "./postsQueryService";
 
 // Export CRUD services

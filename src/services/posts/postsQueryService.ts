@@ -19,19 +19,20 @@ function buildPostWhereClause(filters: PostFilters): any {
 		},
 	};
 
-	// Unified search: search in title, content, and tag names
-	if (filters.search?.trim()) {
-		const searchTerm = filters.search.trim();
+	const trimmedSearch = filters.search?.trim();
+	const trimmedTitle = filters.title?.trim();
+
+	if (trimmedSearch) {
 		whereClause.OR = [
 			{
 				title: {
-					contains: searchTerm,
+					contains: trimmedSearch,
 					mode: "insensitive",
 				},
 			},
 			{
 				content: {
-					contains: searchTerm,
+					contains: trimmedSearch,
 					mode: "insensitive",
 				},
 			},
@@ -40,7 +41,7 @@ function buildPostWhereClause(filters: PostFilters): any {
 					some: {
 						tag: {
 							name: {
-								contains: searchTerm,
+								contains: trimmedSearch,
 								mode: "insensitive",
 							},
 						},
@@ -48,10 +49,9 @@ function buildPostWhereClause(filters: PostFilters): any {
 				},
 			},
 		];
-	} else if (filters.title?.trim()) {
-		// Legacy title-only search (for backward compatibility)
+	} else if (trimmedTitle) {
 		whereClause.title = {
-			contains: filters.title.trim(),
+			contains: trimmedTitle,
 			mode: "insensitive",
 		};
 	}
@@ -81,12 +81,20 @@ function buildPostWhereClause(filters: PostFilters): any {
  * Validate query parameters for getAllPosts
  */
 export function validatePostQueryParams(
+	searchQuery?: string,
 	titleQuery?: string,
 	sortBy?: string,
 	sortOrder?: string,
 	fromDateQuery?: string,
 	toDateQuery?: string
 ): { isValid: boolean; error?: string } {
+	if (
+		searchQuery !== undefined &&
+		(!searchQuery || searchQuery.trim().length === 0)
+	) {
+		return { isValid: false, error: "Search query cannot be empty" };
+	}
+
 	if (
 		titleQuery !== undefined &&
 		(!titleQuery || titleQuery.trim().length === 0)
@@ -476,6 +484,70 @@ export async function getRelatedPosts(slug: string) {
 }
 
 /**
+ * Export all published posts to CSV (for download)
+ */
+export async function exportPostsToCsv(): Promise<string | null> {
+	const posts = await prisma.post.findMany({
+		where: {
+			published: true,
+			author: {
+				deletedAt: null,
+			},
+		},
+		select: {
+			id: true,
+			title: true,
+			slug: true,
+			createdAt: true,
+			updatedAt: true,
+			viewCount: true,
+			featured: true,
+		},
+		orderBy: [{ createdAt: "asc" }],
+	});
+
+	if (posts.length === 0) {
+		return null;
+	}
+
+	const headers = [
+		"id",
+		"title",
+		"slug",
+		"createdAt",
+		"updatedAt",
+		"viewCount",
+		"featured",
+	];
+
+	const escapeCsvValue = (value: unknown): string => {
+		if (value === null || value === undefined) return "";
+		const str = String(value);
+		if (/[",\n]/.test(str)) {
+			return `"${str.replace(/"/g, '""')}"`;
+		}
+		return str;
+	};
+
+	const rows = posts.map((post) => [
+		post.id,
+		post.title,
+		post.slug,
+		post.createdAt.toISOString(),
+		post.updatedAt.toISOString(),
+		post.viewCount,
+		post.featured,
+	]);
+
+	const csvLines = [
+		headers.join(","),
+		...rows.map((row) => row.map(escapeCsvValue).join(",")),
+	];
+
+	return csvLines.join("\n");
+}
+
+/**
  * Get post by slug
  */
 export async function getPostBySlug(slug: string) {
@@ -528,4 +600,3 @@ export async function getDraftBySlug(slug: string, userId: string) {
 
 	return await enrichPostWithMetadata(post);
 }
-
