@@ -1,6 +1,6 @@
 export interface PostFilters {
-	title?: string;
 	search?: string;
+	title?: string;
 	authorId?: string;
 	categoryId?: string;
 	tag?: string;

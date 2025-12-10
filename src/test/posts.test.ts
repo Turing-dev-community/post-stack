@@ -886,6 +886,68 @@ describe("Blog Post Routes", () => {
 		});
 	});
 
+	describe("GET /api/posts/export", () => {
+		it("should export posts as CSV file with correct headers", async () => {
+			// Create some posts to export
+			await prisma.post.createMany({
+				data: [
+					{
+						title: "Export Post 1",
+						content: "# Export Content 1",
+						slug: "export-post-1",
+						published: true,
+						authorId: userId,
+					},
+					{
+						title: "Export Post 2",
+						content: "# Export Content 2",
+						slug: "export-post-2",
+						published: true,
+						authorId: userId,
+					},
+				],
+			});
+
+			const response = await fetch(`${baseUrl}/posts/export`, {
+				headers: {
+					Authorization: `Bearer ${authToken}`,
+				},
+			});
+
+			const csvText = await response.text();
+
+			expect(response.status).toBe(200);
+
+			const contentType = response.headers.get("content-type") || "";
+			expect(contentType.toLowerCase()).toContain("text/csv");
+
+			const contentDisposition =
+				response.headers.get("content-disposition") || "";
+			expect(contentDisposition.toLowerCase()).toContain("attachment");
+			expect(contentDisposition.toLowerCase()).toContain(".csv");
+
+			// CSV should contain our exported post data
+			expect(csvText).toContain("Export Post 1");
+			expect(csvText).toContain("export-post-1");
+			expect(csvText).toContain("Export Post 2");
+			expect(csvText).toContain("export-post-2");
+		});
+
+		it("should return 404 when there are no posts to export", async () => {
+			// No posts created for this test case
+			const response = await fetch(`${baseUrl}/posts/export`, {
+				headers: {
+					Authorization: `Bearer ${authToken}`,
+				},
+			});
+
+			const data: any = await response.json();
+
+			expect(response.status).toBe(404);
+			expect(data).toHaveProperty("error");
+		});
+	});
+
 	describe("GET /api/posts/trending", () => {
 		it("should return only published posts from the last 30 days", async () => {
 			// Create posts within last 30 days
