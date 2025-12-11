@@ -2,10 +2,12 @@ import { prisma } from "../../lib/prisma";
 import {
 	enrichPostsWithMetadata,
 	enrichPostWithMetadata,
+	getBatchLikeCounts,
 	getPostIncludes,
 	getPostIncludesWithDeletedAt,
 	transformPostTags,
 } from "../../utils/posts/postTransformers";
+import { estimateReadingTime } from "../../utils/readingTime";
 import type { PostFilters, PaginationParams, SortParams } from "./types";
 
 /**
@@ -391,15 +393,16 @@ export async function getSavedPosts(
 		take: limit,
 	});
 
-	const postsWithLikes = await Promise.all(
-		savedPosts.map(async (savedPost) => {
-			const enriched = await enrichPostWithMetadata(savedPost.post);
-			return {
-				...enriched,
-				savedAt: savedPost.createdAt,
-			};
-		})
-	);
+	// Batch get like counts to avoid N+1 query
+	const postIds = savedPosts.map((sp) => sp.post.id);
+	const likeCountMap = await getBatchLikeCounts(postIds);
+
+	const postsWithLikes = savedPosts.map((savedPost) => ({
+		...transformPostTags(savedPost.post),
+		likeCount: likeCountMap.get(savedPost.post.id) || 0,
+		readingTime: estimateReadingTime(savedPost.post.content),
+		savedAt: savedPost.createdAt,
+	}));
 
 	const total = await prisma.savedPost.count({
 		where: {
