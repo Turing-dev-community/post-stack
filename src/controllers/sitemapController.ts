@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
+import logger from '../utils/logger';
 
 interface SitemapUrl {
   loc: string;
@@ -175,7 +176,7 @@ export const getSitemap = async (req: Request, res: Response) => {
     res.set('Cache-Control', 'public, max-age=3600');
     res.send(xml);
   } catch (error) {
-    console.error('Error generating sitemap:', error);
+    logger.error('Error generating sitemap', { error });
     res.status(500).json({ error: 'Failed to generate sitemap' });
   }
 };
@@ -230,7 +231,7 @@ export const getRssFeed = async (req: Request, res: Response) => {
     res.set('Cache-Control', 'public, max-age=3600');
     res.send(xml);
   } catch (error) {
-    console.error('Error generating RSS feed:', error);
+    logger.error('Error generating RSS feed', { error });
     res.status(500).json({ error: 'Failed to generate RSS feed' });
   }
 };
