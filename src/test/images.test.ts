@@ -37,6 +37,7 @@ describe("Image Routes", () => {
 		email: "test@example.com",
 		username: "testuser",
 		password: "hashedPassword",
+		role: "AUTHOR" as const,
 		deletedAt: null,
 		createdAt: new Date(),
 		updatedAt: new Date(),

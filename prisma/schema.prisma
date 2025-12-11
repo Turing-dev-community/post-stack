@@ -12,6 +12,7 @@ model User {
   email               String          @unique
   username            String          @unique
   password            String
+  role                Role            @default(AUTHOR)
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @updatedAt
   about               String?
@@ -222,6 +223,11 @@ enum ReportStatus {
   PENDING
   REVIEWED
   REJECTED
+}
+
+enum Role {
+  ADMIN
+  AUTHOR
 }
 
 model UserCommenterStats {

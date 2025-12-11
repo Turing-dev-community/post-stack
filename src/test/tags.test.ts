@@ -290,26 +290,22 @@ describe('Tags API', () => {
       id: 'admin-1',
       email: 'admin@example.com',
       username: 'admin',
+      role: 'ADMIN' as const,
       deletedAt: null,
     };
     const mockAuthor = {
       id: 'author-1',
       email: 'author@example.com',
       username: 'author',
+      role: 'AUTHOR' as const,
       deletedAt: null,
     };
 
     beforeEach(() => {
       // Clear cache before each test
       invalidateCache.invalidateAll();
-      // Set admin email for admin tests
-      process.env.ADMIN_EMAILS = 'admin@example.com';
       adminToken = generateToken(mockAdmin.id);
       authorToken = generateToken(mockAuthor.id);
-    });
-
-    afterEach(() => {
-      delete process.env.ADMIN_EMAILS;
     });
 
     describe('POST /api/tags - Create Tag', () => {
