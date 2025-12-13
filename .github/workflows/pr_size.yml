@@ -32,7 +32,7 @@ jobs:
           # Filter out test files (case-insensitive)
           NON_TEST_FILES=$(echo "$ALL_FILES" \
             | grep -viE '(^|/)(tests?|__tests__|testdata|[^/]*[.]tests?)(/|$)|(^|/)[^/]*([._-]test(s)?|Tests?)\.[a-z0-9]+$' \
-            | grep -viE '(^|/)examples(/|$)|(^|/)docs?(/|$)(^|/)prisma)(/|$)' \
+            | grep -viE '(^|/)(examples|docs?|prisma)(/|$)' \
             | grep -viE '\.(md|rst|json|toml|lock|yml|yaml|cfg|ini|csv|png|txt|mdx|adoc|asciidoc)$' \
             || true)
 
