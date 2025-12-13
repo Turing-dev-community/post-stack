@@ -454,6 +454,7 @@ describe('Comment Reporting and Moderation API', () => {
         id: adminId,
         email: adminEmail,
         username: 'admin',
+        role: 'ADMIN' as const,
         deletedAt: null,
       };
 
@@ -476,9 +477,6 @@ describe('Comment Reporting and Moderation API', () => {
         },
       ];
 
-      const originalAdminEmails = process.env.ADMIN_EMAILS;
-      process.env.ADMIN_EMAILS = adminEmail;
-
       (prismaMock.user.findUnique as jest.Mock).mockImplementation(({ where }) => {
         if (where.id === adminId) {
           return Promise.resolve(mockAdmin);
@@ -500,12 +498,6 @@ describe('Comment Reporting and Moderation API', () => {
         status: ReportStatus.PENDING,
       });
 
-      // Restore original environment variable
-      if (originalAdminEmails !== undefined) {
-        process.env.ADMIN_EMAILS = originalAdminEmails;
-      } else {
-        delete process.env.ADMIN_EMAILS;
-      }
     });
 
     it('should reject access by non-admin users', async () => {

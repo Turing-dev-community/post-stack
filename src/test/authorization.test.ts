@@ -22,6 +22,7 @@ describe('Role-Based Authorization', () => {
         id: userId,
         email: 'test@example.com',
         username: 'testuser',
+        role: Role.AUTHOR,
         deletedAt: new Date(),
       };
 
@@ -42,6 +43,7 @@ describe('Role-Based Authorization', () => {
       id: userId || 'user-1',
       email: email || 'test@example.com',
       username: 'testuser',
+      role: role,
       deletedAt: null,
     });
 
@@ -74,6 +76,7 @@ describe('Role-Based Authorization', () => {
         id: 'user-1',
         email: 'test@example.com',
         username: 'testuser',
+        role: Role.AUTHOR,
         createdAt: new Date(),
       };
 
@@ -90,40 +93,6 @@ describe('Role-Based Authorization', () => {
 
       expect(response.body.user).toHaveProperty('role', Role.AUTHOR);
     });
-
-    it('should create user with ADMIN role if email is in admin list', async () => {
-      const originalAdminEmails = process.env.ADMIN_EMAILS;
-      process.env.ADMIN_EMAILS = 'admin@example.com';
-
-      (prismaMock.user.findFirst as unknown as jest.Mock).mockResolvedValue(null);
-
-      const createdUser = {
-        id: 'admin-1',
-        email: 'admin@example.com',
-        username: 'admin',
-        createdAt: new Date(),
-      };
-
-      (prismaMock.user.create as unknown as jest.Mock).mockResolvedValue(createdUser);
-
-      const response = await request(app)
-        .post('/api/auth/signup')
-        .send({
-          email: 'admin@example.com',
-          username: 'admin',
-          password: 'Password123',
-        })
-        .expect(201);
-
-      expect(response.body.user).toHaveProperty('role', Role.ADMIN);
-
-      // Restore original env
-      if (originalAdminEmails) {
-        process.env.ADMIN_EMAILS = originalAdminEmails;
-      } else {
-        delete process.env.ADMIN_EMAILS;
-      }
-    });
   });
 
   describe('Login with Role', () => {
@@ -136,6 +105,7 @@ describe('Role-Based Authorization', () => {
         email: 'test@example.com',
         username: 'testuser',
         password: hashedPassword,
+        role: Role.AUTHOR,
         deletedAt: null,
       };
 
@@ -153,9 +123,6 @@ describe('Role-Based Authorization', () => {
     });
 
     it('should return ADMIN role in login response for admin user', async () => {
-      const originalAdminEmails = process.env.ADMIN_EMAILS;
-      process.env.ADMIN_EMAILS = 'admin@example.com';
-
       const bcrypt = require('bcryptjs');
       const hashedPassword = await bcrypt.hash('Password123', 12);
 
@@ -164,6 +131,7 @@ describe('Role-Based Authorization', () => {
         email: 'admin@example.com',
         username: 'admin',
         password: hashedPassword,
+        role: Role.ADMIN,
         deletedAt: null,
       };
 
@@ -178,31 +146,16 @@ describe('Role-Based Authorization', () => {
         .expect(200);
 
       expect(response.body.user).toHaveProperty('role', Role.ADMIN);
-
-      // Restore original env
-      if (originalAdminEmails) {
-        process.env.ADMIN_EMAILS = originalAdminEmails;
-      } else {
-        delete process.env.ADMIN_EMAILS;
-      }
     });
   });
 
   describe('Admin-Only Routes', () => {
-    beforeEach(() => {
-      // Set admin email for admin tests
-      process.env.ADMIN_EMAILS = 'admin@example.com';
-    });
-
-    afterEach(() => {
-      delete process.env.ADMIN_EMAILS;
-    });
-
     it('should allow ADMIN to create category', async () => {
       const mockAdmin = {
         id: 'admin-1',
         email: 'admin@example.com',
         username: 'admin',
+        role: Role.ADMIN,
         deletedAt: null,
       };
 
@@ -232,6 +185,7 @@ describe('Role-Based Authorization', () => {
         id: 'author-1',
         email: 'author@example.com',
         username: 'author',
+        role: Role.AUTHOR,
         deletedAt: null,
       };
 
@@ -255,6 +209,7 @@ describe('Role-Based Authorization', () => {
         id: 'admin-1',
         email: 'admin@example.com',
         username: 'admin',
+        role: Role.ADMIN,
         deletedAt: null,
       };
 
@@ -284,6 +239,7 @@ describe('Role-Based Authorization', () => {
         id: 'author-1',
         email: 'author@example.com',
         username: 'author',
+        role: Role.AUTHOR,
         deletedAt: null,
       };
 
@@ -303,17 +259,12 @@ describe('Role-Based Authorization', () => {
   });
 
   describe('Author-Only Routes', () => {
-    beforeEach(() => {
-      // Ensure no admin emails are set for author tests
-      delete process.env.ADMIN_EMAILS;
-      delete process.env.ADMIN_USER_IDS;
-    });
-
     it('should allow AUTHOR to access post creation route', async () => {
       const mockAuthor = {
         id: 'author-1',
         email: 'author@example.com',
         username: 'author',
+        role: Role.AUTHOR,
         deletedAt: null,
       };
 
@@ -342,6 +293,7 @@ describe('Role-Based Authorization', () => {
         id: 'author-1',
         email: 'author@example.com',
         username: 'author',
+        role: Role.AUTHOR,
         deletedAt: null,
       };
 
@@ -365,12 +317,11 @@ describe('Role-Based Authorization', () => {
     });
 
     it('should allow ADMIN to access author-only routes (inheritance)', async () => {
-      process.env.ADMIN_EMAILS = 'admin@example.com';
-
       const mockAdmin = {
         id: 'admin-1',
         email: 'admin@example.com',
         username: 'admin',
+        role: Role.ADMIN,
         deletedAt: null,
       };
 
@@ -392,8 +343,6 @@ describe('Role-Based Authorization', () => {
       // ADMIN role should inherit AUTHOR permissions
       expect(response.status).not.toBe(403);
       expect(response.body.error).not.toBe('ForbiddenError');
-
-      delete process.env.ADMIN_EMAILS;
     });
   });
 });

@@ -8,21 +8,42 @@ const { prisma: prismaMock } = setupPrismaMock(prisma, app);
 
 describe('Post Reports API', () => {
   const userId = 'user-1';
+  const adminId = 'admin-1';
   const authToken = (() => {
     process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret';
     return generateToken(userId);
   })();
+  const adminToken = (() => {
+    process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret';
+    return generateToken(adminId);
+  })();
+
+  const mockUser = {
+    id: userId,
+    email: 'user@example.com',
+    username: 'testuser',
+    role: 'AUTHOR' as const,
+    deletedAt: null,
+  };
+
+  const mockAdmin = {
+    id: adminId,
+    email: 'admin@example.com',
+    username: 'admin',
+    role: 'ADMIN' as const,
+    deletedAt: null,
+  };
 
   beforeEach(() => {
-    (prismaMock.user.findUnique as jest.Mock).mockResolvedValue({
-      id: userId,
-      email: 'user@example.com',
-      username: 'testuser',
-      deletedAt: null,
+    (prismaMock.user.findUnique as jest.Mock).mockImplementation((args: any) => {
+      if (args?.where?.id === adminId) {
+        return Promise.resolve(mockAdmin);
+      }
+      if (args?.where?.id === userId) {
+        return Promise.resolve(mockUser);
+      }
+      return Promise.resolve(null);
     });
-
-    delete process.env.ADMIN_EMAILS;
-    delete process.env.ADMIN_USER_IDS;
   });
 
   describe('POST /api/posts/:postId/report', () => {
@@ -82,7 +103,6 @@ describe('Post Reports API', () => {
 
   describe('GET /api/reports', () => {
     it('lists reports when user is admin', async () => {
-      process.env.ADMIN_EMAILS = 'user@example.com';
       (prismaMock.postReport.findMany as jest.Mock).mockResolvedValue([
         {
           id: 'report-1',
@@ -99,7 +119,7 @@ describe('Post Reports API', () => {
 
       const res = await request(app)
         .get('/api/reports')
-        .set('Authorization', `Bearer ${authToken}`)
+        .set('Authorization', `Bearer ${adminToken}`)
         .expect(200);
 
       expect(res.body).toHaveProperty('reports');
@@ -118,7 +138,6 @@ describe('Post Reports API', () => {
 
   describe('PATCH /api/reports/:id', () => {
     it('updates report status when admin', async () => {
-      process.env.ADMIN_EMAILS = 'user@example.com';
       const reportId = 'report-upd';
       (prismaMock.postReport.findUnique as jest.Mock).mockResolvedValue({ id: reportId });
       (prismaMock.postReport.update as jest.Mock).mockResolvedValue({
@@ -134,7 +153,7 @@ describe('Post Reports API', () => {
 
       const res = await request(app)
         .patch(`/api/reports/${reportId}`)
-        .set('Authorization', `Bearer ${authToken}`)
+        .set('Authorization', `Bearer ${adminToken}`)
         .send({ status: 'REVIEWED' })
         .expect(200);
 
@@ -143,21 +162,19 @@ describe('Post Reports API', () => {
     });
 
     it('returns 400 for invalid status', async () => {
-      process.env.ADMIN_EMAILS = 'user@example.com';
       const res = await request(app)
         .patch('/api/reports/report-bad')
-        .set('Authorization', `Bearer ${authToken}`)
+        .set('Authorization', `Bearer ${adminToken}`)
         .send({ status: 'INVALID' })
         .expect(400);
       expect(res.body).toHaveProperty('error', 'Invalid status');
     });
 
     it('returns 404 when report missing', async () => {
-      process.env.ADMIN_EMAILS = 'user@example.com';
       (prismaMock.postReport.findUnique as jest.Mock).mockResolvedValue(null);
       const res = await request(app)
         .patch('/api/reports/report-miss')
-        .set('Authorization', `Bearer ${authToken}`)
+        .set('Authorization', `Bearer ${adminToken}`)
         .send({ status: 'REJECTED' })
         .expect(404);
       expect(res.body).toHaveProperty('error', 'Report not found');

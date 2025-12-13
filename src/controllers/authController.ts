@@ -1,7 +1,7 @@
 import { Response } from 'express';
 import { asyncHandler } from '../middleware/validation';
 import {
-  AuthRequest, comparePassword, generateAccessToken, generateRefreshToken, verifyRefreshToken, revokeRefreshToken, revokeAllUserRefreshTokens, hashPassword, getUserRole, isAccountLocked,
+  AuthRequest, comparePassword, generateAccessToken, generateRefreshToken, verifyRefreshToken, revokeRefreshToken, revokeAllUserRefreshTokens, hashPassword, isAccountLocked,
   calculateLockoutExpiration,
 } from '../utils/auth';
 import { prisma } from '../lib/prisma';
@@ -28,17 +28,14 @@ export const signup = asyncHandler(async (req: AuthRequest, res: Response) => {
   const hashedPassword = await hashPassword(password);
   const user = await prisma.user.create({
     data: { email, username, password: hashedPassword },
-    select: { id: true, email: true, username: true, createdAt: true },
+    select: { id: true, email: true, username: true, role: true, createdAt: true },
   });
-
-  // Determine user role (default is AUTHOR)
-  const role = await getUserRole(user.id, user.email);
 
   const accessToken = generateAccessToken(user.id);
   const refreshToken = await generateRefreshToken(user.id);
   return res.status(201).json({
     message: 'User created successfully',
-    user: { ...user, role },
+    user,
     accessToken,
     refreshToken
   });
@@ -105,13 +102,11 @@ export const login = asyncHandler(async (req: AuthRequest, res: Response) => {
     data: { failedLoginAttempts: 0, lockedUntil: null },
   });
 
-  const role = await getUserRole(user.id, user.email);
-
   const accessToken = generateAccessToken(user.id);
   const refreshToken = await generateRefreshToken(user.id);
   return res.json({
     message: 'Login successful',
-    user: { id: user.id, email: user.email, username: user.username, role },
+    user: { id: user.id, email: user.email, username: user.username, role: user.role },
     accessToken,
     refreshToken,
   });
