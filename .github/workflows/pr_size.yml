@@ -1,0 +1,95 @@
+name: PR Size Check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+ pr-size-check:
+    name: Enforce PR Size / LOC Rules
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' &&
+      !(startsWith(github.head_ref, 'ci/'))
+    env:
+      MIN_LOC: 400
+      MIN_FILES: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  
+
+      - name: Collect non-test changed files
+        id: collect_files
+        run: |
+          # All changed files in the PR vs base
+          ALL_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD)
+
+          echo "All changed files:"
+          echo "$ALL_FILES"
+
+          # Filter out test files (case-insensitive)
+          NON_TEST_FILES=$(echo "$ALL_FILES" \
+            | grep -viE '(^|/)(tests?|__tests__|testdata|[^/]*[.]tests?)(/|$)|(^|/)[^/]*([._-]test(s)?|Tests?)\.[a-z0-9]+$' \
+            | grep -viE '(^|/)examples(/|$)' \
+            | grep -viE '(^|/)docs?(/|$)' \
+            | grep -viE '(^|/)prisma/(migrations|schema)(/|$)' \
+            | grep -viE '\.(md|rst|json|toml|lock|yml|yaml|cfg|ini|csv|png|txt|mdx|adoc|asciidoc)$' \
+            || true)
+
+          echo "Non-test changed files:"
+          echo "$NON_TEST_FILES"
+
+          # Save for later steps
+          echo "$NON_TEST_FILES" > changed_non_test_files.txt
+
+          COUNT=$(echo "$NON_TEST_FILES" | sed '/^\s*$/d' | wc -l)
+          COUNT=${COUNT:-0}
+          echo "files=$COUNT" >> "$GITHUB_OUTPUT"
+          echo "Non-test file count: $COUNT"
+
+      - name: Count LOC in non-test changed files
+        id: count_loc
+        run: |
+          LOC=0
+
+          while read FILE; do
+            # skip empty lines
+            [ -z "$FILE" ] && continue
+
+            if [[ -f "$FILE" ]]; then
+              # Count added/modified lines only (no diff headers)
+              LINES=$(git diff origin/${{ github.base_ref }}...HEAD -- "$FILE" \
+                | grep -E '^\+' \
+                | grep -vE '^\+\+\+' \
+                | sed 's/^+//' \
+                | grep -vE '^\s*$' \
+                | grep -vE '^\s*(//|/\*|\*|\*/|///|#|<!--)' \
+                | grep -vE "^\s*(\"\"\"|''')" \
+                | wc -l)
+
+              echo "$FILE -> $LINES"
+              LOC=$((LOC + LINES))
+            fi
+          done < changed_non_test_files.txt
+
+          echo "loc=$LOC" >> "$GITHUB_OUTPUT"
+          echo "Total non-test LOC: $LOC"
+
+      - name: Validate thresholds
+        run: |
+          echo "Changed files: ${{ steps.collect_files.outputs.files }}"
+          echo "LOC: ${{ steps.count_loc.outputs.loc }}"
+
+          if [ "${{ steps.collect_files.outputs.files }}" -lt "$MIN_FILES" ]; then
+            echo "❌ PR must change at least $MIN_FILES non-test files."
+            exit 1
+          fi
+
+          if [ "${{ steps.count_loc.outputs.loc }}" -lt "$MIN_LOC" ]; then
+            echo "❌ PR must include at least $MIN_LOC lines of code (non-test)."
+            exit 1
+          fi
+
+          echo "✅ PR passes size + LOC thresholds!"
