@@ -287,3 +287,36 @@ export async function bulkCreatePosts(
 		throw error;
 	}
 }
+
+/**
+ * Clone an existing post as a new draft
+ */
+export async function clonePost(
+	req: AuthRequest,
+	res: Response
+): Promise<Response> {
+	if (!checkAuth(req, res)) return res as Response;
+
+	const { postId } = req.params;
+
+	try {
+		const post = await postsService.clonePost(postId, req.user.id);
+
+		return res.status(201).json({
+			message: "Post cloned successfully",
+			post,
+		});
+	} catch (error: any) {
+		if (error.message === "Post not found") {
+			return res.status(404).json({
+				error: "Post not found",
+			});
+		}
+		if (error.message === "Not authorized to clone this post") {
+			return res.status(403).json({
+				error: "Not authorized to clone this post",
+			});
+		}
+		throw error;
+	}
+}

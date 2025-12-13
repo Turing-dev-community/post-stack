@@ -55,10 +55,10 @@ export async function createPost(data: CreatePostData, userId: string) {
 			tags:
 				data.tags && data.tags.length > 0
 					? {
-							create: data.tags.map((tagId: string) => ({
-								tagId,
-							})),
-					  }
+						create: data.tags.map((tagId: string) => ({
+							tagId,
+						})),
+					}
 					: undefined,
 		},
 		include: getPostIncludes(),
@@ -167,13 +167,13 @@ export async function updatePost(
 				tags:
 					data.tags !== undefined
 						? {
-								create:
-									data.tags && data.tags.length > 0
-										? data.tags.map((tagId: string) => ({
-												tagId,
-										  }))
-										: [],
-						  }
+							create:
+								data.tags && data.tags.length > 0
+									? data.tags.map((tagId: string) => ({
+										tagId,
+									}))
+									: [],
+						}
 						: undefined,
 			},
 			include: getPostIncludes(),
@@ -281,10 +281,10 @@ export async function bulkCreatePosts(
 					tags:
 						postData.tags && postData.tags.length > 0
 							? {
-									create: postData.tags.map((tagId: string) => ({
-										tagId,
-									})),
-							  }
+								create: postData.tags.map((tagId: string) => ({
+									tagId,
+								})),
+							}
 							: undefined,
 				},
 				include: getPostIncludes(),
@@ -381,4 +381,69 @@ export async function unschedulePost(
 	invalidateCache.invalidateUserCaches(userId);
 
 	return await enrichPostWithMetadata(post);
+}
+
+/**
+ * Clone an existing post as a new draft
+ * Creates a copy of the post with a new unique slug
+ */
+export async function clonePost(postId: string, userId: string) {
+	const existingPost = await prisma.post.findUnique({
+		where: { id: postId },
+		include: {
+			tags: {
+				include: {
+					tag: true,
+				},
+			},
+		},
+	});
+
+	if (!existingPost) {
+		throw new Error("Post not found");
+	}
+
+	// Check if user owns the post
+	if (existingPost.authorId !== userId) {
+		throw new Error("Not authorized to clone this post");
+	}
+
+	// Generate a unique slug for the cloned post
+	const baseTitle = `${existingPost.title} (Copy)`;
+	const slug = await generateUniquePostSlug(baseTitle);
+
+	// Extract tag IDs from the original post
+	const tagIds = existingPost.tags.map((postTag: any) => postTag.tagId);
+
+	// Create the cloned post as a draft
+	const clonedPost = await prisma.post.create({
+		data: {
+			title: baseTitle,
+			content: existingPost.content,
+			slug,
+			published: false, // Always create as draft
+			featured: false, // Don't copy featured status
+			authorId: userId,
+			categoryId: existingPost.categoryId,
+			metaTitle: existingPost.metaTitle,
+			metaDescription: existingPost.metaDescription,
+			ogImage: existingPost.ogImage,
+			excerpt: existingPost.excerpt,
+			featuredImage: existingPost.featuredImage,
+			tags:
+				tagIds.length > 0
+					? {
+						create: tagIds.map((tagId: string) => ({
+							tagId,
+						})),
+					}
+					: undefined,
+		},
+		include: getPostIncludes(),
+	});
+
+	invalidateCache.invalidateListCaches();
+	invalidateCache.invalidateUserCaches(userId);
+
+	return await enrichPostWithMetadata(clonedPost);
 }
